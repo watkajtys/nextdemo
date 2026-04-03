@@ -45,6 +45,8 @@
             display: block;
             width: 100%;
             height: 100%;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         .button-group {
             display: flex;
@@ -158,6 +160,218 @@
         // Cubic Out for smoother hover/click transitions that look good in reverse
         function easeOutCubic(t) {
             return 1 - Math.pow(1 - t, 3);
+        }
+
+        // Procedural 1-bit Graphic Novel Avatar Generator
+        function drawGraphicNovelAvatar(ctx, x, y, w, h, seedString, highlightColor) {
+            // Seeded PRNG
+            let seed = 0;
+            for(let i=0; i<seedString.length; i++) {
+                seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+                seed |= 0;
+            }
+            const rand = () => {
+                const x = Math.sin(seed++) * 10000;
+                return x - Math.floor(x);
+            };
+
+            ctx.save();
+            ctx.translate(x, y);
+            const scale = w / 100;
+            ctx.scale(scale, scale); // 100x100 coordinate system
+
+            // Base silhouette (Black)
+            ctx.fillStyle = '#0f0f11';
+            
+            // Shoulders / Torso - sharp angles
+            const shoulderWidth = 35 + rand() * 15;
+            const shoulderHeight = 75 + rand() * 10;
+            ctx.beginPath();
+            ctx.moveTo(50 - shoulderWidth, 100);
+            ctx.lineTo(50 - shoulderWidth + 10, shoulderHeight);
+            ctx.lineTo(50, shoulderHeight + 5); // V-neck dip
+            ctx.lineTo(50 + shoulderWidth - 10, shoulderHeight);
+            ctx.lineTo(50 + shoulderWidth, 100);
+            ctx.fill();
+
+            // Neck
+            ctx.fillRect(40, 60, 20, 20);
+
+            // Head Base
+            const headW = 16 + rand() * 8;
+            const jawY = 70 + rand() * 12;
+            const cheekY = 50 + rand() * 10;
+            ctx.beginPath();
+            ctx.moveTo(50 - headW, 20);
+            ctx.lineTo(50 + headW, 20);
+            ctx.lineTo(50 + headW, cheekY);
+            ctx.lineTo(50 + headW - 6, jawY - 10);
+            ctx.lineTo(50, jawY);
+            ctx.lineTo(50 - headW + 6, jawY - 10);
+            ctx.lineTo(50 - headW, cheekY);
+            ctx.fill();
+
+            // Hair (Black, extending outside head)
+            const hairStyle = Math.floor(rand() * 4);
+            ctx.beginPath();
+            if (hairStyle === 0) {
+                // Spiky anime/comic style
+                ctx.moveTo(50 - headW - 5, 35);
+                for(let i=0; i<=5; i++) {
+                    ctx.lineTo(50 - headW + (i * headW * 2 / 5), 5 + rand() * 15);
+                    if(i < 5) ctx.lineTo(50 - headW + (i * headW * 2 / 5) + 5, 20 + rand()*5);
+                }
+                ctx.lineTo(50 + headW + 5, 35);
+            } else if (hairStyle === 1) {
+                // Slick/Blocky cyberpunk
+                ctx.moveTo(50 - headW - 2, 35);
+                ctx.lineTo(50 - headW + 5, 10);
+                ctx.lineTo(50 + headW + 5, 15);
+                ctx.lineTo(50 + headW + 2, 35);
+                // Add a sharp cutout
+                ctx.lineTo(50 + headW - 5, 20);
+                ctx.lineTo(50, 25);
+            } else if (hairStyle === 2) {
+                // Long angular
+                ctx.moveTo(50 - headW - 12, 65);
+                ctx.lineTo(50 - headW, 15);
+                ctx.lineTo(50 + headW, 15);
+                ctx.lineTo(50 + headW + 12, 65);
+                ctx.lineTo(50 + headW, 25);
+                ctx.lineTo(50 - headW, 25);
+            } else {
+                // Bald / Shaved with tech implants (sharp lines)
+                ctx.moveTo(50 - headW, 20);
+                ctx.lineTo(50 - headW + 10, 10);
+                ctx.lineTo(50 + headW - 10, 10);
+                ctx.lineTo(50 + headW, 20);
+            }
+            ctx.fill();
+
+            // --- HIGHLIGHTS (Colored) ---
+            ctx.fillStyle = highlightColor;
+            
+            // Determine light direction (Left or Right)
+            const lightDir = rand() > 0.5 ? 1 : -1; 
+
+            // Face Highlight (Half of the face)
+            ctx.beginPath();
+            if (lightDir === 1) {
+                // Light on Right
+                ctx.moveTo(50, 20);
+                ctx.lineTo(50 + headW - 2, 20);
+                ctx.lineTo(50 + headW - 2, cheekY);
+                ctx.lineTo(50 + headW - 7, jawY - 11);
+                ctx.lineTo(50, jawY - 2);
+                // Jagged shadow line down the middle
+                ctx.lineTo(50 + 6, 60);
+                ctx.lineTo(50 - 3, 50);
+                ctx.lineTo(50 + 5, 40);
+                ctx.lineTo(50 - 2, 30);
+            } else {
+                // Light on Left
+                ctx.moveTo(50, 20);
+                ctx.lineTo(50 - headW + 2, 20);
+                ctx.lineTo(50 - headW + 2, cheekY);
+                ctx.lineTo(50 - headW + 7, jawY - 11);
+                ctx.lineTo(50, jawY - 2);
+                ctx.lineTo(50 - 6, 60);
+                ctx.lineTo(50 + 3, 50);
+                ctx.lineTo(50 - 5, 40);
+                ctx.lineTo(50 + 2, 30);
+            }
+            ctx.fill();
+
+            // Collar / Clothing Highlight
+            ctx.beginPath();
+            if (lightDir === 1) {
+                ctx.moveTo(50 + 8, shoulderHeight + 5);
+                ctx.lineTo(50 + shoulderWidth - 12, shoulderHeight + 5);
+                ctx.lineTo(50 + shoulderWidth - 5, 100);
+                ctx.lineTo(50 + 15, 100);
+            } else {
+                ctx.moveTo(50 - 8, shoulderHeight + 5);
+                ctx.lineTo(50 - shoulderWidth + 12, shoulderHeight + 5);
+                ctx.lineTo(50 - shoulderWidth + 5, 100);
+                ctx.lineTo(50 - 15, 100);
+            }
+            ctx.fill();
+
+            // Eyes
+            const eyeY = 42 + rand() * 6;
+            const eyeW = 6 + rand() * 4;
+            const eyeH = 2 + rand() * 3;
+            const angry = rand() > 0.3; // More likely to be angry/sharp
+
+            // Left Eye
+            ctx.fillStyle = lightDir === -1 ? '#0f0f11' : highlightColor;
+            ctx.beginPath();
+            ctx.moveTo(50 - 6, eyeY);
+            ctx.lineTo(50 - 6 - eyeW, eyeY - (angry ? eyeH : -eyeH));
+            ctx.lineTo(50 - 6 - eyeW/2, eyeY + eyeH);
+            ctx.fill();
+
+            // Right Eye
+            ctx.fillStyle = lightDir === 1 ? '#0f0f11' : highlightColor;
+            ctx.beginPath();
+            ctx.moveTo(50 + 6, eyeY);
+            ctx.lineTo(50 + 6 + eyeW, eyeY - (angry ? eyeH : -eyeH));
+            ctx.lineTo(50 + 6 + eyeW/2, eyeY + eyeH);
+            ctx.fill();
+
+            // Nose (Sharp triangle highlight on the shadow side)
+            ctx.fillStyle = highlightColor;
+            ctx.beginPath();
+            if (lightDir === 1) {
+                // Shadow on left, draw white nose highlight on left
+                ctx.moveTo(50, 50);
+                ctx.lineTo(50 - 4, 58);
+                ctx.lineTo(50, 58);
+            } else {
+                ctx.moveTo(50, 50);
+                ctx.lineTo(50 + 4, 58);
+                ctx.lineTo(50, 58);
+            }
+            ctx.fill();
+
+            // Mouth (Sharp slit)
+            const mouthY = jawY - 12;
+            const mouthW = 5 + rand() * 5;
+            
+            ctx.fillStyle = '#0f0f11';
+            ctx.beginPath();
+            ctx.moveTo(50 - mouthW, mouthY);
+            ctx.lineTo(50 + mouthW, mouthY + (rand() > 0.5 ? 2 : -2));
+            ctx.lineTo(50, mouthY + 2);
+            ctx.fill();
+            
+            // Add a white highlight to the mouth on the shadow side
+            ctx.fillStyle = highlightColor;
+            ctx.beginPath();
+            if (lightDir === 1) {
+                ctx.moveTo(50, mouthY);
+                ctx.lineTo(50 - mouthW, mouthY + (rand() > 0.5 ? 2 : -2));
+                ctx.lineTo(50, mouthY + 2);
+            } else {
+                ctx.moveTo(50, mouthY);
+                ctx.lineTo(50 + mouthW, mouthY + (rand() > 0.5 ? 2 : -2));
+                ctx.lineTo(50, mouthY + 2);
+            }
+            ctx.fill();
+
+            // Optional: Add some graphic novel "speed lines" or sharp geometric tattoos
+            if (rand() > 0.5) {
+                ctx.fillStyle = lightDir === 1 ? '#0f0f11' : highlightColor;
+                ctx.fillRect(50 + 8, cheekY + 5, 4, 10);
+                ctx.fillRect(50 + 14, cheekY + 8, 2, 6);
+            }
+            if (rand() > 0.5) {
+                ctx.fillStyle = lightDir === -1 ? '#0f0f11' : highlightColor;
+                ctx.fillRect(50 - 12, cheekY + 5, 4, 10);
+                ctx.fillRect(50 - 16, cheekY + 8, 2, 6);
+            }
+
+            ctx.restore();
         }
 
         // --- INITIALIZATION ---
@@ -364,7 +578,7 @@
                     cell.flash -= 0.03;
                 }
 
-                // 5. Draw Silhouette inside Photo
+                // 5. Draw 1-bit Graphic Novel Avatar inside Photo
                 ctx.save();
                 ctx.beginPath();
                 ctx.rect(photoX, photoY, photoW, photoH);
@@ -372,13 +586,7 @@
                 
                 if (photoW > 10) {
                     ctx.globalAlpha = eased;
-                    ctx.fillStyle = '#0f0f11';
-                    ctx.beginPath();
-                    ctx.arc(photoX + photoW/2, photoY + photoH/2 - photoH*0.15, photoW*0.15, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(photoX + photoW/2, photoY + photoH + photoH*0.2, photoW*0.45, Math.PI, Math.PI*2);
-                    ctx.fill();
+                    drawGraphicNovelAvatar(ctx, photoX, photoY, photoW, photoH, cell.hash || 'default', cell.color);
                 }
                 ctx.restore();
 
@@ -501,17 +709,10 @@
                     ctx.rect(photoX, photoY, photoW, photoH);
                     ctx.clip();
                     
-                    // Draw a simple "user avatar" silhouette inside the animated square
+                    // Draw the 1-bit Graphic Novel Avatar inside the animated square
                     if (photoW > 10) {
-                        ctx.fillStyle = '#0f0f11'; // Cutout color (matches background)
-                        ctx.beginPath();
-                        // Head
-                        ctx.arc(photoX + photoW/2, photoY + photoH/2 - photoH*0.15, photoW*0.15, 0, Math.PI*2);
-                        ctx.fill();
-                        // Body
-                        ctx.beginPath();
-                        ctx.arc(photoX + photoW/2, photoY + photoH + photoH*0.2, photoW*0.45, Math.PI, Math.PI*2);
-                        ctx.fill();
+                        ctx.globalAlpha = fadeProgress; // Fade in with the color
+                        drawGraphicNovelAvatar(ctx, photoX, photoY, photoW, photoH, targetCell.hash || 'default', targetCell.color);
                     }
                     ctx.restore();
 
@@ -723,7 +924,6 @@
             }
 
             const rect = canvas.getBoundingClientRect();
-            // Scale mouse coordinates to match internal canvas resolution
             const clickX = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width);
             const clickY = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height);
 
@@ -737,18 +937,26 @@
             }
         });
 
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            // Scale mouse coordinates to match internal canvas resolution
-            mouseX = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width);
-            mouseY = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height);
+        canvas.addEventListener('pointermove', (e) => {
+            // Only track hover for mouse, not touch (pointerType === 'mouse')
+            if (e.pointerType === 'mouse') {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width);
+                mouseY = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height);
+            }
         });
 
-        canvas.addEventListener('mouseleave', () => {
+        canvas.addEventListener('pointerleave', () => {
             clickedCell = null;
             mouseX = -1000;
             mouseY = -1000;
         });
+
+        // Clear hover state immediately on touch devices
+        canvas.addEventListener('touchstart', () => {
+            mouseX = -1000;
+            mouseY = -1000;
+        }, { passive: true });
 
         // Bootstrap the application
         initHitMap();
