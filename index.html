@@ -46,6 +46,10 @@
             width: 100%;
             height: 100%;
         }
+        .button-group {
+            display: flex;
+            gap: 16px;
+        }
         button {
             background-color: #3b82f6;
             color: white;
@@ -96,7 +100,10 @@
         <div class="canvas-wrapper">
             <canvas id="mosaicCanvas" width="800" height="800"></canvas>
         </div>
-        <button id="addUserBtn">Trigger Jules PR (Add User)</button>
+        <div class="button-group">
+            <button id="addUserBtn">Trigger Jules PR (Add User)</button>
+            <button id="add20Btn">Add 20 Users</button>
+        </div>
         <div class="stats">
             <span id="userCount">Users: 0</span>
             <span id="maxDepth">Max Depth: 4</span>
@@ -122,18 +129,20 @@
         ];
 
         // --- STATE ---
+        const githubIconPath = new Path2D("M111.7 101.4c-3.1 0-5.5 2.5-5.5 5.5 0 3.1-2.5 5.5-5.5 5.5S95 110 95 107V78.8c.7-1.4 1.1-2.9 1.1-4.6V41.9c0-19.2-15.6-34.8-34.7-34.8S26.6 22.7 26.6 41.9v32.3c0 2.2.7 4.3 1.9 6V107c0 3.1-2.5 5.5-5.6 5.5s-5.5-2.5-5.5-5.5-2.5-5.5-5.5-5.5c-3.1 0-5.5 2.5-5.5 5.5 0 8.8 6.9 15.9 15.5 16.5.4.1.7.1 1.1.1s.8 0 1.1-.1c8.6-.6 15.5-7.7 15.5-16.5V84.8s-.3-4.7 3.7-4.7 3.7 4.7 3.7 4.7v22c0 3.1 2.5 5.5 5.5 5.5s5.5-2.5 5.5-5.5v-22s-.8-4.7 3.7-4.7 3.7 4.7 3.7 4.7v22c0 3.1 2.5 5.5 5.5 5.5 3.1 0 5.5-2.5 5.5-5.5v-22s-.3-4.7 3.7-4.7 3.7 4.7 3.7 4.7V107c0 8.8 6.9 15.9 15.5 16.5.4.1.7.1 1.1.1s.8 0 1.1-.1c8.7-.6 15.5-7.7 15.5-16.5.2-3.1-2.3-5.6-5.3-5.6M43.2 70c-3.1 0-5.5-3.1-5.5-6.9s2.5-6.9 5.5-6.9 5.5 3.1 5.5 6.9c.1 3.8-2.4 6.9-5.5 6.9m37 0c-3.1 0-5.5-3.1-5.5-6.9s2.5-6.9 5.5-6.9 5.5 3.1 5.5 6.9c.1 3.8-2.4 6.9-5.5 6.9");
         let emptyBaseCells = []; // Valid cells that haven't been filled yet
         let activeCells = [];    // Cells that are currently filled and visible
         let userCount = 0;
         let animState = null;    // Tracks the current animation { targetCell, startTime }
+        let clickedCell = null;  // Tracks the currently clicked cell
         let mouseX = -1000;      // Track mouse X for hover effects
         let mouseY = -1000;      // Track mouse Y for hover effects
-        let lastHoveredCell = null; // Track last hovered cell for hysteresis (anti-jitter)
 
         // --- DOM ELEMENTS ---
         const canvas = document.getElementById('mosaicCanvas');
         const ctx = canvas.getContext('2d');
         const btn = document.getElementById('addUserBtn');
+        const add20Btn = document.getElementById('add20Btn');
         const userCountDisplay = document.getElementById('userCount');
 
         // --- UTILS ---
@@ -146,6 +155,11 @@
             return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
         }
 
+        // Cubic Out for smoother hover/click transitions that look good in reverse
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+
         // --- INITIALIZATION ---
         function initHitMap() {
             // 1. Create a hidden off-screen canvas to draw the bounding shape
@@ -154,23 +168,46 @@
             offCanvas.height = CANVAS_SIZE;
             const offCtx = offCanvas.getContext('2d');
 
-            // 2. Draw the Hit Map (A massive letter "G")
+            // 2. Draw the Hit Map (GitHub Icon)
             offCtx.fillStyle = 'black';
             offCtx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
             
             offCtx.fillStyle = 'white';
-            offCtx.font = 'bold 750px sans-serif';
-            offCtx.textAlign = 'center';
-            offCtx.textBaseline = 'middle';
-            // Offset slightly to center the G visually
-            offCtx.fillText('G', CANVAS_SIZE / 2, CANVAS_SIZE / 2 + 40);
+            
+            // Carefully calculated scale to avoid grid-center boundary collisions
+            const scale = 620 / 134; 
+            const scaledW = 124.6 * scale;
+            const scaledH = 134 * scale;
+            const offsetX = (CANVAS_SIZE - scaledW) / 2;
+            const offsetY = (CANVAS_SIZE - scaledH) / 2;
+            
+            offCtx.save();
+            offCtx.translate(offsetX, offsetY);
+            offCtx.scale(scale, scale);
+            offCtx.fill(githubIconPath);
+            
+            // Fill in the natural SVG eyes so we have a solid shape to carve from
+            // This prevents the natural SVG holes from creating irregular shapes on our coarse grid
+            offCtx.fillStyle = 'white';
+            offCtx.beginPath();
+            offCtx.arc(43.2, 63.1, 10, 0, Math.PI * 2); // Left eye
+            offCtx.arc(80.2, 63.1, 10, 0, Math.PI * 2); // Right eye
+            offCtx.fill();
+            offCtx.restore();
 
             // 3. Extract pixel data to check for intersections
             const imageData = offCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
 
             // 4. Build the base grid and validate cells against the Hit Map
+            // We only sample the left half and mirror it to the right half to guarantee 100% mathematical symmetry.
             for (let y = 0; y < GRID_SIZE; y++) {
-                for (let x = 0; x < GRID_SIZE; x++) {
+                for (let x = 0; x < GRID_SIZE / 2; x++) {
+                    // Force a 1x2 hole for the left eye at x: 7, y: 8-9
+                    // Halved the size (2 spots per eye) and moved closer to the center line
+                    if (x === 7 && (y === 8 || y === 9)) {
+                        continue;
+                    }
+
                     // Calculate the center point of the current cell
                     const cx = Math.floor(x * CELL_SIZE + CELL_SIZE / 2);
                     const cy = Math.floor(y * CELL_SIZE + CELL_SIZE / 2);
@@ -178,10 +215,21 @@
                     // Calculate the 1D array index for the pixel in the ImageData array (RGBA format)
                     const index = (cy * CANVAS_SIZE + cx) * 4;
                     
-                    // Check the red channel. If it's > 128, it means we hit the white "G"
+                    // Check the red channel. If it's > 128, it means we hit the white shape
                     if (imageData[index] > 128) {
+                        // Add left side cell
                         emptyBaseCells.push({
                             x: x * CELL_SIZE,
+                            y: y * CELL_SIZE,
+                            w: CELL_SIZE,
+                            h: CELL_SIZE,
+                            depth: 0 // Base grid is depth 0
+                        });
+                        
+                        // Add mirrored right side cell
+                        const mirroredX = GRID_SIZE - 1 - x;
+                        emptyBaseCells.push({
+                            x: mirroredX * CELL_SIZE,
                             y: y * CELL_SIZE,
                             w: CELL_SIZE,
                             h: CELL_SIZE,
@@ -211,39 +259,7 @@
             const bigY = (CANVAS_SIZE - bigH) / 2;
 
             // Determine hovered cell
-            let currentlyHovered = null;
-            if (!animState) {
-                let maxProgress = -1;
-                for (let i = activeCells.length - 1; i >= 0; i--) {
-                    const cell = activeCells[i];
-                    const progress = cell.hoverProgress || 0;
-                    const eased = easeOutExpo(progress);
-                    
-                    const currX = cell.x + (bigX - cell.x) * eased;
-                    const currY = cell.y + (bigY - cell.y) * eased;
-                    const currW = cell.w + (bigW - cell.w) * eased;
-                    const currH = cell.h + (bigH - cell.h) * eased;
-
-                    // Hysteresis: Add a 30px invisible buffer if this cell is already being hovered.
-                    // This prevents the edge from shrinking away from the mouse and causing jitter.
-                    const isSticky = (cell === lastHoveredCell);
-                    const buffer = isSticky ? 30 : 0;
-
-                    const inCurrentBounds = mouseX >= currX - buffer && mouseX <= currX + currW + buffer &&
-                                            mouseY >= currY - buffer && mouseY <= currY + currH + buffer;
-                    const inBaseBounds = mouseX >= cell.x - buffer && mouseX <= cell.x + cell.w + buffer &&
-                                         mouseY >= cell.y - buffer && mouseY <= cell.y + cell.h + buffer;
-
-                    if (inCurrentBounds || inBaseBounds) {
-                        // Prioritize cells that are already expanded/expanding
-                        if (progress > maxProgress) {
-                            maxProgress = progress;
-                            currentlyHovered = cell;
-                        }
-                    }
-                }
-            }
-            lastHoveredCell = currentlyHovered;
+            let currentlyHovered = clickedCell;
 
             const normalCells = [];
             const animatingCells = [];
@@ -263,6 +279,18 @@
             }
 
             // Draw normal cells
+            let hoveredCell = null;
+            if (!animState && !clickedCell) {
+                for (let i = activeCells.length - 1; i >= 0; i--) {
+                    const cell = activeCells[i];
+                    if (mouseX >= cell.x && mouseX <= cell.x + cell.w &&
+                        mouseY >= cell.y && mouseY <= cell.y + cell.h) {
+                        hoveredCell = cell;
+                        break;
+                    }
+                }
+            }
+
             for (const cell of normalCells) {
                 // Fill color
                 ctx.fillStyle = cell.color;
@@ -275,10 +303,21 @@
                     cell.flash -= 0.03; // Fade out flash
                 }
                 
-                // Thin dark border to separate cells
-                ctx.strokeStyle = '#0f0f11';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
+                if (cell === hoveredCell) {
+                    // Hover effect: Lighten and add white border
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+                    
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    // Draw inner border to prevent overlapping adjacent cells
+                    ctx.strokeRect(cell.x + 1, cell.y + 1, cell.w - 2, cell.h - 2);
+                } else {
+                    // Thin dark border to separate cells
+                    ctx.strokeStyle = '#0f0f11';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
+                }
             }
 
             // Draw faint outlines for valid but empty base cells
@@ -290,7 +329,7 @@
 
             // Draw hovered/animating cells on top
             for (const cell of animatingCells) {
-                const eased = easeOutExpo(cell.hoverProgress);
+                const eased = easeOutCubic(cell.hoverProgress);
                 
                 const currX = cell.x + (bigX - cell.x) * eased;
                 const currY = cell.y + (bigY - cell.y) * eased;
@@ -418,6 +457,7 @@
                     activeCells.push({...targetCell, flash: 0.8}); // Flash white when it lands
                     animState = null;
                     btn.disabled = false;
+                    add20Btn.disabled = false;
                     btn.innerText = "Trigger Jules PR (Add User)";
                 }
                 
@@ -551,6 +591,7 @@
                 if (allSubdividable.length === 0) {
                     btn.innerText = "Max Resolution Reached";
                     btn.disabled = true;
+                    add20Btn.disabled = true;
                     return;
                 }
 
@@ -561,6 +602,10 @@
                 
                 const activeIndex = activeCells.indexOf(parent);
                 activeCells.splice(activeIndex, 1);
+                
+                if (clickedCell === parent) {
+                    clickedCell = null;
+                }
 
                 const hw = parent.w / 2;
                 const hh = parent.h / 2;
@@ -591,6 +636,7 @@
             
             // Start the animation
             btn.disabled = true;
+            add20Btn.disabled = true;
             btn.innerText = "Processing...";
             animState = {
                 targetCell: targetCell,
@@ -598,8 +644,98 @@
             };
         }
 
+        function addBulkUsers(count) {
+            if (animState) return; // Prevent clicking while animating
+
+            for (let i = 0; i < count; i++) {
+                const hash = Math.random().toString(16).substring(2, 9);
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                let targetCell = null;
+
+                if (emptyBaseCells.length > 0) {
+                    const cell = emptyBaseCells.pop();
+                    targetCell = {
+                        ...cell,
+                        color: getRandomNeonColor(),
+                        hash,
+                        time,
+                        flash: 0.8
+                    };
+                    activeCells.push(targetCell);
+                } else {
+                    const allSubdividable = activeCells.filter(c => c.depth < MAX_DEPTH);
+                    
+                    if (allSubdividable.length === 0) {
+                        btn.innerText = "Max Resolution Reached";
+                        btn.disabled = true;
+                        add20Btn.disabled = true;
+                        break;
+                    }
+
+                    const minDepth = Math.min(...allSubdividable.map(c => c.depth));
+                    const priorityCells = allSubdividable.filter(c => c.depth === minDepth);
+                    const parentIndex = Math.floor(Math.random() * priorityCells.length);
+                    const parent = priorityCells[parentIndex];
+                    
+                    const activeIndex = activeCells.indexOf(parent);
+                    activeCells.splice(activeIndex, 1);
+                    
+                    if (clickedCell === parent) {
+                        clickedCell = null;
+                    }
+
+                    const hw = parent.w / 2;
+                    const hh = parent.h / 2;
+                    const nextDepth = parent.depth + 1;
+                    
+                    const quadrants = [
+                        { x: parent.x,      y: parent.y,      w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                        { x: parent.x + hw, y: parent.y,      w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                        { x: parent.x,      y: parent.y + hh, w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                        { x: parent.x + hw, y: parent.y + hh, w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time }
+                    ];
+
+                    const newUserIndex = Math.floor(Math.random() * 4);
+                    targetCell = quadrants[newUserIndex];
+                    targetCell.color = getRandomNeonColor();
+                    targetCell.flash = 0.8;
+
+                    for (let j = 0; j < 4; j++) {
+                        if (j !== newUserIndex) {
+                            activeCells.push({...quadrants[j], flash: 0.5});
+                        }
+                    }
+                    activeCells.push(targetCell);
+                }
+                userCount++;
+            }
+            userCountDisplay.innerText = `Users: ${userCount}`;
+        }
+
         // --- EVENT LISTENERS ---
         btn.addEventListener('click', addUser);
+        add20Btn.addEventListener('click', () => addBulkUsers(20));
+
+        canvas.addEventListener('click', (e) => {
+            if (clickedCell) {
+                clickedCell = null;
+                return;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            // Scale mouse coordinates to match internal canvas resolution
+            const clickX = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width);
+            const clickY = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height);
+
+            for (let i = activeCells.length - 1; i >= 0; i--) {
+                const cell = activeCells[i];
+                if (clickX >= cell.x && clickX <= cell.x + cell.w &&
+                    clickY >= cell.y && clickY <= cell.y + cell.h) {
+                    clickedCell = cell;
+                    break;
+                }
+            }
+        });
 
         canvas.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -609,6 +745,7 @@
         });
 
         canvas.addEventListener('mouseleave', () => {
+            clickedCell = null;
             mouseX = -1000;
             mouseY = -1000;
         });
