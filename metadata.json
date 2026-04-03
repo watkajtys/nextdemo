@@ -1,0 +1,5 @@
+{
+  "name": "Quadtree Mosaic Prototype",
+  "description": "A zero-dependency HTML5 Canvas prototype demonstrating a Quadtree Mosaic Subdivision algorithm for a conference booth display.",
+  "requestFramePermissions": []
+}

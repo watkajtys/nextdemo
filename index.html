@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadtree Mosaic Subdivision</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #1a1a24 0%, #050505 100%);
+            color: #ffffff;
+            font-family: 'Inter', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .canvas-wrapper {
+            padding: 10px;
+            background: rgba(26, 26, 29, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 1 / 1;
+        }
+        canvas {
+            background-color: #0f0f11;
+            border-radius: 6px;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        button:hover {
+            background-color: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+        button:disabled {
+            background-color: #374151;
+            color: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .stats {
+            font-family: 'JetBrains Mono', monospace;
+            color: #9ca3af;
+            font-size: 14px;
+            display: flex;
+            gap: 20px;
+        }
+        .stats span {
+            background: #1a1a1d;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="canvas-wrapper">
+            <canvas id="mosaicCanvas" width="800" height="800"></canvas>
+        </div>
+        <button id="addUserBtn">Trigger Jules PR (Add User)</button>
+        <div class="stats">
+            <span id="userCount">Users: 0</span>
+            <span id="maxDepth">Max Depth: 4</span>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const CANVAS_SIZE = 800;
+        const GRID_SIZE = 20; // 20x20 base coarse grid
+        const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
+        const MAX_DEPTH = 4; // Prevent infinite recursion
+        
+        // High-contrast neon color palette
+        const NEON_COLORS = [
+            '#ff0055', // Neon Pink
+            '#00ffaa', // Neon Mint
+            '#00ddff', // Neon Cyan
+            '#ffea00', // Neon Yellow
+            '#bf00ff', // Neon Purple
+            '#ff6600', // Neon Orange
+            '#39ff14'  // Neon Green
+        ];
+
+        // --- STATE ---
+        let emptyBaseCells = []; // Valid cells that haven't been filled yet
+        let activeCells = [];    // Cells that are currently filled and visible
+        let userCount = 0;
+        let animState = null;    // Tracks the current animation { targetCell, startTime }
+        let mouseX = -1000;      // Track mouse X for hover effects
+        let mouseY = -1000;      // Track mouse Y for hover effects
+        let lastHoveredCell = null; // Track last hovered cell for hysteresis (anti-jitter)
+
+        // --- DOM ELEMENTS ---
+        const canvas = document.getElementById('mosaicCanvas');
+        const ctx = canvas.getContext('2d');
+        const btn = document.getElementById('addUserBtn');
+        const userCountDisplay = document.getElementById('userCount');
+
+        // --- UTILS ---
+        function getRandomNeonColor() {
+            return NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+        }
+
+        // Easing function for smooth animation (Exponential Out for a snappier landing)
+        function easeOutExpo(t) {
+            return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+        }
+
+        // --- INITIALIZATION ---
+        function initHitMap() {
+            // 1. Create a hidden off-screen canvas to draw the bounding shape
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = CANVAS_SIZE;
+            offCanvas.height = CANVAS_SIZE;
+            const offCtx = offCanvas.getContext('2d');
+
+            // 2. Draw the Hit Map (A massive letter "G")
+            offCtx.fillStyle = 'black';
+            offCtx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            
+            offCtx.fillStyle = 'white';
+            offCtx.font = 'bold 750px sans-serif';
+            offCtx.textAlign = 'center';
+            offCtx.textBaseline = 'middle';
+            // Offset slightly to center the G visually
+            offCtx.fillText('G', CANVAS_SIZE / 2, CANVAS_SIZE / 2 + 40);
+
+            // 3. Extract pixel data to check for intersections
+            const imageData = offCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+
+            // 4. Build the base grid and validate cells against the Hit Map
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    // Calculate the center point of the current cell
+                    const cx = Math.floor(x * CELL_SIZE + CELL_SIZE / 2);
+                    const cy = Math.floor(y * CELL_SIZE + CELL_SIZE / 2);
+                    
+                    // Calculate the 1D array index for the pixel in the ImageData array (RGBA format)
+                    const index = (cy * CANVAS_SIZE + cx) * 4;
+                    
+                    // Check the red channel. If it's > 128, it means we hit the white "G"
+                    if (imageData[index] > 128) {
+                        emptyBaseCells.push({
+                            x: x * CELL_SIZE,
+                            y: y * CELL_SIZE,
+                            w: CELL_SIZE,
+                            h: CELL_SIZE,
+                            depth: 0 // Base grid is depth 0
+                        });
+                    }
+                }
+            }
+            
+            // Shuffle emptyBaseCells so the initial fill appears random rather than sequential
+            emptyBaseCells.sort(() => Math.random() - 0.5);
+            
+            draw();
+        }
+
+        // --- RENDER LOOP ---
+        function draw(timestamp) {
+            if (!timestamp) timestamp = performance.now();
+
+            // Clear main canvas
+            ctx.fillStyle = '#0f0f11';
+            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+            const bigW = 400;
+            const bigH = 500; // Changed to 500 for a 100px Polaroid bottom
+            const bigX = (CANVAS_SIZE - bigW) / 2;
+            const bigY = (CANVAS_SIZE - bigH) / 2;
+
+            // Determine hovered cell
+            let currentlyHovered = null;
+            if (!animState) {
+                let maxProgress = -1;
+                for (let i = activeCells.length - 1; i >= 0; i--) {
+                    const cell = activeCells[i];
+                    const progress = cell.hoverProgress || 0;
+                    const eased = easeOutExpo(progress);
+                    
+                    const currX = cell.x + (bigX - cell.x) * eased;
+                    const currY = cell.y + (bigY - cell.y) * eased;
+                    const currW = cell.w + (bigW - cell.w) * eased;
+                    const currH = cell.h + (bigH - cell.h) * eased;
+
+                    // Hysteresis: Add a 30px invisible buffer if this cell is already being hovered.
+                    // This prevents the edge from shrinking away from the mouse and causing jitter.
+                    const isSticky = (cell === lastHoveredCell);
+                    const buffer = isSticky ? 30 : 0;
+
+                    const inCurrentBounds = mouseX >= currX - buffer && mouseX <= currX + currW + buffer &&
+                                            mouseY >= currY - buffer && mouseY <= currY + currH + buffer;
+                    const inBaseBounds = mouseX >= cell.x - buffer && mouseX <= cell.x + cell.w + buffer &&
+                                         mouseY >= cell.y - buffer && mouseY <= cell.y + cell.h + buffer;
+
+                    if (inCurrentBounds || inBaseBounds) {
+                        // Prioritize cells that are already expanded/expanding
+                        if (progress > maxProgress) {
+                            maxProgress = progress;
+                            currentlyHovered = cell;
+                        }
+                    }
+                }
+            }
+            lastHoveredCell = currentlyHovered;
+
+            const normalCells = [];
+            const animatingCells = [];
+
+            for (const cell of activeCells) {
+                if (cell === currentlyHovered) {
+                    cell.hoverProgress = Math.min((cell.hoverProgress || 0) + 0.08, 1);
+                } else {
+                    cell.hoverProgress = Math.max((cell.hoverProgress || 0) - 0.05, 0);
+                }
+
+                if (cell.hoverProgress > 0) {
+                    animatingCells.push(cell);
+                } else {
+                    normalCells.push(cell);
+                }
+            }
+
+            // Draw normal cells
+            for (const cell of normalCells) {
+                // Fill color
+                ctx.fillStyle = cell.color;
+                ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+                
+                // Flash effect for newly created sibling cells
+                if (cell.flash > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${cell.flash})`;
+                    ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+                    cell.flash -= 0.03; // Fade out flash
+                }
+                
+                // Thin dark border to separate cells
+                ctx.strokeStyle = '#0f0f11';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
+            }
+
+            // Draw faint outlines for valid but empty base cells
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+            for (const cell of emptyBaseCells) {
+                ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
+            }
+
+            // Draw hovered/animating cells on top
+            for (const cell of animatingCells) {
+                const eased = easeOutExpo(cell.hoverProgress);
+                
+                const currX = cell.x + (bigX - cell.x) * eased;
+                const currY = cell.y + (bigY - cell.y) * eased;
+                const currW = cell.w + (bigW - cell.w) * eased;
+                const currH = cell.h + (bigH - cell.h) * eased;
+
+                // 1. Draw base shadow and solid color background (so it doesn't look transparent)
+                ctx.fillStyle = cell.color;
+                ctx.shadowColor = cell.color;
+                ctx.shadowBlur = 30 * eased;
+                ctx.fillRect(currX, currY, currW, currH);
+                ctx.shadowBlur = 0;
+                
+                // 2. Draw Polaroid White Frame (fades in)
+                ctx.fillStyle = `rgba(245, 245, 245, ${eased})`;
+                ctx.fillRect(currX, currY, currW, currH);
+
+                // 3. Calculate Photo Bounds
+                const border = 20 * eased;
+                const photoX = currX + border;
+                const photoY = currY + border;
+                const photoW = currW - border * 2;
+                const photoH = currW - border * 2; // Keep photo square
+
+                // 4. Draw Photo Background
+                ctx.fillStyle = cell.color;
+                ctx.fillRect(photoX, photoY, photoW, photoH);
+
+                if (cell.flash > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${cell.flash})`;
+                    ctx.fillRect(photoX, photoY, photoW, photoH);
+                    cell.flash -= 0.03;
+                }
+
+                // 5. Draw Silhouette inside Photo
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(photoX, photoY, photoW, photoH);
+                ctx.clip();
+                
+                if (photoW > 10) {
+                    ctx.globalAlpha = eased;
+                    ctx.fillStyle = '#0f0f11';
+                    ctx.beginPath();
+                    ctx.arc(photoX + photoW/2, photoY + photoH/2 - photoH*0.15, photoW*0.15, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(photoX + photoW/2, photoY + photoH + photoH*0.2, photoW*0.45, Math.PI, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.restore();
+
+                // 6. Draw Text & Icon in Bottom Section
+                if (eased > 0.3) {
+                    const textAlpha = (eased - 0.3) * 1.4; // Fade in text
+                    ctx.globalAlpha = Math.min(1, Math.max(0, textAlpha));
+                    
+                    const bottomY = photoY + photoH;
+                    const bottomH = currH - (border + photoH);
+                    
+                    // Git Commit Icon
+                    const iconX = currX + 50;
+                    const iconY = bottomY + bottomH / 2;
+                    
+                    ctx.strokeStyle = '#888';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(iconX, iconY, 10, 0, Math.PI*2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(iconX, iconY - 25);
+                    ctx.lineTo(iconX, iconY - 10);
+                    ctx.moveTo(iconX, iconY + 10);
+                    ctx.lineTo(iconX, iconY + 25);
+                    ctx.stroke();
+
+                    // Text
+                    ctx.fillStyle = '#111';
+                    ctx.font = 'bold 22px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(cell.hash || 'a1b2c3d', iconX + 30, iconY - 12);
+                    
+                    ctx.fillStyle = '#666';
+                    ctx.font = '16px sans-serif';
+                    ctx.fillText(cell.time || '12:00 PM', iconX + 30, iconY + 12);
+                    
+                    ctx.globalAlpha = 1.0;
+                }
+
+                // 7. Border around the whole card
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.8 * eased})`;
+                ctx.lineWidth = Math.max(1, currW * 0.005);
+                ctx.strokeRect(currX, currY, currW, currH);
+            }
+            
+            // Draw animation if active
+            if (animState) {
+                const elapsed = timestamp - animState.startTime;
+                const { targetCell } = animState;
+                
+                let currentX, currentY, currentW, currentH;
+                let fadeProgress = 0;
+                
+                if (elapsed < 1500) {
+                    // Phase 1: Hold big placeholder (1.5 seconds)
+                    currentW = bigW;
+                    currentH = bigH;
+                    currentX = bigX;
+                    currentY = bigY;
+                    // Animate color developing (fading in) between 200ms and 1200ms
+                    fadeProgress = Math.min(Math.max((elapsed - 200) / 1000, 0), 1);
+                } else if (elapsed < 2500) {
+                    // Phase 2: Shrink/move to target (1.0 seconds)
+                    fadeProgress = 1;
+                    const progress = Math.min((elapsed - 1500) / 1000, 1.0);
+                    const eased = easeOutExpo(progress);
+                    
+                    currentX = bigX + (targetCell.x - bigX) * eased;
+                    currentY = bigY + (targetCell.y - bigY) * eased;
+                    currentW = bigW + (targetCell.w - bigW) * eased;
+                    currentH = bigH + (targetCell.h - bigH) * eased;
+                } else {
+                    // Phase 3: Animation complete
+                    activeCells.push({...targetCell, flash: 0.8}); // Flash white when it lands
+                    animState = null;
+                    btn.disabled = false;
+                    btn.innerText = "Trigger Jules PR (Add User)";
+                }
+                
+                if (animState) {
+                    // 1. Draw the base dark gray square
+                    ctx.fillStyle = '#2a2a35';
+                    ctx.fillRect(currentX, currentY, currentW, currentH);
+                    
+                    // 2. Draw Polaroid White Frame
+                    ctx.fillStyle = `rgba(245, 245, 245, 1)`;
+                    ctx.fillRect(currentX, currentY, currentW, currentH);
+
+                    // 3. Calculate Photo Bounds
+                    const border = 20 * (currentW / bigW); // Scale border
+                    const photoX = currentX + border;
+                    const photoY = currentY + border;
+                    const photoW = currentW - border * 2;
+                    const photoH = currentW - border * 2; // Keep photo square
+
+                    // 4. Draw Photo Background
+                    ctx.fillStyle = '#2a2a35';
+                    ctx.fillRect(photoX, photoY, photoW, photoH);
+                    
+                    // 5. Draw the developing neon color over it (Polaroid effect)
+                    if (fadeProgress > 0) {
+                        ctx.save();
+                        // Ease-in curve (t^2) makes it start slow and pop at the end
+                        const easedFade = fadeProgress * fadeProgress; 
+                        ctx.globalAlpha = easedFade;
+                        ctx.fillStyle = targetCell.color;
+                        ctx.shadowColor = targetCell.color;
+                        ctx.shadowBlur = 20 * easedFade; // Glow increases as it develops
+                        
+                        ctx.fillRect(photoX, photoY, photoW, photoH);
+                        ctx.restore();
+                    }
+                    
+                    // Clip the silhouette so it doesn't draw outside the photo
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(photoX, photoY, photoW, photoH);
+                    ctx.clip();
+                    
+                    // Draw a simple "user avatar" silhouette inside the animated square
+                    if (photoW > 10) {
+                        ctx.fillStyle = '#0f0f11'; // Cutout color (matches background)
+                        ctx.beginPath();
+                        // Head
+                        ctx.arc(photoX + photoW/2, photoY + photoH/2 - photoH*0.15, photoW*0.15, 0, Math.PI*2);
+                        ctx.fill();
+                        // Body
+                        ctx.beginPath();
+                        ctx.arc(photoX + photoW/2, photoY + photoH + photoH*0.2, photoW*0.45, Math.PI, Math.PI*2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // 6. Draw Text & Icon in Bottom Section
+                    if (currentW > bigW * 0.3) { // Only draw when large enough
+                        const textAlpha = Math.min(1, (currentW - bigW * 0.3) / (bigW * 0.3));
+                        ctx.globalAlpha = textAlpha;
+                        
+                        const bottomY = photoY + photoH;
+                        const bottomH = currentH - (border + photoH);
+                        
+                        // Git Commit Icon
+                        const iconX = currentX + 50 * (currentW / bigW);
+                        const iconY = bottomY + bottomH / 2;
+                        
+                        ctx.strokeStyle = '#888';
+                        ctx.lineWidth = 3 * (currentW / bigW);
+                        ctx.beginPath();
+                        ctx.arc(iconX, iconY, 10 * (currentW / bigW), 0, Math.PI*2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(iconX, iconY - 25 * (currentW / bigW));
+                        ctx.lineTo(iconX, iconY - 10 * (currentW / bigW));
+                        ctx.moveTo(iconX, iconY + 10 * (currentW / bigW));
+                        ctx.lineTo(iconX, iconY + 25 * (currentW / bigW));
+                        ctx.stroke();
+
+                        // Text
+                        ctx.fillStyle = '#111';
+                        ctx.font = `bold ${22 * (currentW / bigW)}px monospace`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(targetCell.hash || 'a1b2c3d', iconX + 30 * (currentW / bigW), iconY - 12 * (currentW / bigW));
+                        
+                        ctx.fillStyle = '#666';
+                        ctx.font = `${16 * (currentW / bigW)}px sans-serif`;
+                        ctx.fillText(targetCell.time || '12:00 PM', iconX + 30 * (currentW / bigW), iconY + 12 * (currentW / bigW));
+                        
+                        ctx.globalAlpha = 1.0;
+                    }
+                    
+                    // Draw a white border around it while animating
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.lineWidth = Math.max(1, currentW * 0.005);
+                    ctx.strokeRect(currentX, currentY, currentW, currentH);
+                }
+            }
+            
+            // Update UI
+            userCountDisplay.innerText = `Users: ${userCount}`;
+
+            // Continuous render loop for flashes and pulses
+            requestAnimationFrame(draw);
+        }
+
+        // --- INTERACTION LOGIC ---
+        function addUser() {
+            if (animState) return; // Prevent clicking while animating
+
+            let targetCell = null;
+            const hash = Math.random().toString(16).substring(2, 9);
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            if (emptyBaseCells.length > 0) {
+                // PHASE 1: Fill the coarse base grid first
+                const cell = emptyBaseCells.pop();
+                targetCell = {
+                    ...cell,
+                    color: getRandomNeonColor(),
+                    hash,
+                    time
+                };
+            } else {
+                // PHASE 2: Quadtree Subdivision
+                const allSubdividable = activeCells.filter(c => c.depth < MAX_DEPTH);
+                
+                if (allSubdividable.length === 0) {
+                    btn.innerText = "Max Resolution Reached";
+                    btn.disabled = true;
+                    return;
+                }
+
+                const minDepth = Math.min(...allSubdividable.map(c => c.depth));
+                const priorityCells = allSubdividable.filter(c => c.depth === minDepth);
+                const parentIndex = Math.floor(Math.random() * priorityCells.length);
+                const parent = priorityCells[parentIndex];
+                
+                const activeIndex = activeCells.indexOf(parent);
+                activeCells.splice(activeIndex, 1);
+
+                const hw = parent.w / 2;
+                const hh = parent.h / 2;
+                const nextDepth = parent.depth + 1;
+                
+                const quadrants = [
+                    { x: parent.x,      y: parent.y,      w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                    { x: parent.x + hw, y: parent.y,      w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                    { x: parent.x,      y: parent.y + hh, w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time },
+                    { x: parent.x + hw, y: parent.y + hh, w: hw, h: hh, depth: nextDepth, color: parent.color, hash, time }
+                ];
+
+                const newUserIndex = Math.floor(Math.random() * 4);
+                targetCell = quadrants[newUserIndex];
+                targetCell.color = getRandomNeonColor();
+
+                // Add the 3 sibling quadrants immediately so the grid doesn't look empty.
+                // The 4th quadrant (targetCell) is left empty as a "hole" for the animation to land in.
+                for (let i = 0; i < 4; i++) {
+                    if (i !== newUserIndex) {
+                        // Give siblings a quick white flash so the subdivision feels like an event
+                        activeCells.push({...quadrants[i], flash: 0.5});
+                    }
+                }
+            }
+
+            userCount++;
+            
+            // Start the animation
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            animState = {
+                targetCell: targetCell,
+                startTime: performance.now()
+            };
+        }
+
+        // --- EVENT LISTENERS ---
+        btn.addEventListener('click', addUser);
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            // Scale mouse coordinates to match internal canvas resolution
+            mouseX = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width);
+            mouseY = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height);
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            mouseX = -1000;
+            mouseY = -1000;
+        });
+
+        // Bootstrap the application
+        initHitMap();
+        requestAnimationFrame(draw); // Start the continuous render loop
+    </script>
+</body>
+</html>
