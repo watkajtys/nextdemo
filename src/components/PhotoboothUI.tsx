@@ -261,15 +261,6 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 )}
             </AnimatePresence>
 
-            {/* Stats Overlay */}
-            <div className="absolute top-6 left-6 z-20 flex gap-4 font-mono text-sm text-gray-200">
-                <span className="rounded-lg border border-white/10 bg-[#1a1a1d]/80 px-4 py-2 shadow-lg backdrop-blur-md">
-                    Users: {userCount}
-                </span>
-                <span className="rounded-lg border border-white/10 bg-[#1a1a1d]/80 px-4 py-2 shadow-lg backdrop-blur-md">
-                    Max Depth: {MAX_DEPTH}
-                </span>
-            </div>
 
             {/* Prototype Controls */}
             <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-3">
