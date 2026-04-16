@@ -201,16 +201,18 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     return (
         <>
             {/* Live WebRTC Camera Stream Layer */}
-            {/* It sits quietly in the background loading instantly, but only fades into view (z-30) when counting down */}
-            <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`pointer-events-none fixed inset-0 h-full w-full object-cover transition-opacity duration-300 ease-in-out ${
+            {/* Center-cropped square mirror UI */}
+            <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl transition-all duration-500 ease-out ${
                     (countdown !== null || showPreview) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
-                }`}
-            />
+                }`}>
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] scale-x-[-1] rounded-3xl border-8 border-white/10 object-cover shadow-[0_0_80px_rgba(255,255,255,0.05)]"
+                />
+            </div>
             {/* Hidden canvas purely for extracting the still frame */}
             <canvas ref={canvasRef} className="hidden" />
 
@@ -235,7 +237,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
-                        className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                        className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
                     >
                         <AnimatePresence>
                             <motion.span
