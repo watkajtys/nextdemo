@@ -5,6 +5,16 @@ set -e
 
 echo "📸 Starting up the Nanobanana Photobooth..."
 
+# Bulletproof: Kill any zombie processes from previous crashed runs before starting
+echo "🧹 Cleaning up old processes..."
+pkill -f "chromium" || true
+pkill -f "node" || true
+pkill -f "unclutter" || true
+
+# Bulletproof: Define trap EARLY so if the script fails during startup, we still clean up!
+trap 'echo "🛑 Shutting down Photobooth..."; kill $SERVER_PID $VITE_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null || true; exit' SIGINT SIGTERM EXIT
+
+
 # Best Practice: Robust path resolution (handles symlinks gracefully)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 cd "$SCRIPT_DIR"
@@ -88,18 +98,21 @@ CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigat
 # we want the script to continue to the standard trap and shutdown correctly.
 set +e
 
+# Bulletproof: Run Chromium in the background so we can monitor all crashes simultaneously
 if command -v chromium-browser &> /dev/null; then
-    chromium-browser $CHROMIUM_FLAGS http://localhost:3000
+    chromium-browser $CHROMIUM_FLAGS http://localhost:3000 &
+    CHROMIUM_PID=$!
 elif command -v chromium &> /dev/null; then
-    chromium $CHROMIUM_FLAGS http://localhost:3000
+    chromium $CHROMIUM_FLAGS http://localhost:3000 &
+    CHROMIUM_PID=$!
 else
     echo "🌍 Chromium not found. Open http://localhost:3000 in your browser!"
+    # Since we didn't start Chromium, we just fallback to waiting on the servers
+    wait -n $SERVER_PID $VITE_PID
+    exit
 fi
 
-# Best Practice: Catch termination and script EXIT to cleanly kill everything we started.
-trap 'echo "🛑 Shutting down Photobooth..."; kill $SERVER_PID $VITE_PID $UNCLUTTER_PID 2>/dev/null || true' SIGINT SIGTERM EXIT
-
 # Best Practice: 'wait -n' waits for ANY of the background processes to exit.
-# This means if either the backend or frontend crashes, the script cleanly exits.
-# If wrapped in an OS service (like systemd), this ensures the whole app automatically restarts!
-wait -n $SERVER_PID $VITE_PID
+# This means if Chromium, the backend, OR the frontend crashes, the entire script cleanly exits.
+# If wrapped in an OS service (like systemd), this ensures the whole booth automatically restarts instantly!
+wait -n $SERVER_PID $VITE_PID $CHROMIUM_PID
