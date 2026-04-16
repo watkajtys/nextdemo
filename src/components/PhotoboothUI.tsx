@@ -262,23 +262,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             </AnimatePresence>
 
 
-            {/* Prototype Controls */}
-            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-3">
-                <button
-                    disabled={isAnimating || countdown !== null || flash}
-                    onClick={startCountdown}
-                    className="flex h-8 w-[120px] items-center justify-center rounded-md border border-white/10 bg-blue-500/90 text-[11px] font-semibold uppercase tracking-wide text-white shadow-xl backdrop-blur-md transition-all hover:-translate-y-0.5 hover:bg-blue-600 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-700/80 disabled:text-gray-400"
-                >
-                    {isAnimating ? 'Pending...' : countdown !== null ? 'Capturing...' : flash ? 'Processing...' : 'Add User'}
-                </button>
-                <button
-                    disabled={isAnimating || countdown !== null || flash}
-                    onClick={triggerBulkCapture}
-                    className="flex h-8 w-[120px] items-center justify-center rounded-md border border-white/10 bg-blue-500/90 text-[11px] font-semibold uppercase tracking-wide text-white shadow-xl backdrop-blur-md transition-all hover:-translate-y-0.5 hover:bg-blue-600 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-700/80 disabled:text-gray-400"
-                >
-                    Add 20 Users
-                </button>
-            </div>
+
         </>
     );
 };
