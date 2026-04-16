@@ -118,11 +118,14 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             // Instantly trigger the native Canvas polaroid animation sequence (the existing one!)
             finishCaptureAndAnimate(tempHash, tempImageUrl);
             
-            // Upload the Blob to the Node.js backend for standard Gemini stylization silently
+            // Upload the Blob to the Cloud Server for Gemini stylization silently
             if (blobToUpload) {
                 const formData = new FormData();
                 formData.append('image', blobToUpload, 'capture.jpg');
-                fetch('http://localhost:3001/api/process', {
+                
+                const cloudServerUrl = import.meta.env.VITE_API_URL || 'http://204.168.131.95:3001';
+                
+                fetch(`${cloudServerUrl}/api/process`, {
                     method: 'POST',
                     body: formData
                 }).catch(console.error);
