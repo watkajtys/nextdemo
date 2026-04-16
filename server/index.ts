@@ -176,23 +176,32 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
              console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
              try {
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-2.0-flash-preview-image-generation',
+                    config: {
+                        responseModalities: ['TEXT', 'IMAGE'],
+                    },
                     contents: [
-                        { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white" },
-                        { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype || 'image/jpeg' }}
+                        {
+                            role: 'user',
+                            parts: [
+                                { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white" },
+                                { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype || 'image/jpeg' }}
+                            ]
+                        }
                     ]
                 });
                 
-                // Extract the multimodal pixel output returned by Gemini 2.0 Flash (if present)
+                // Extract the generated image from the multimodal response
                 const parts = response.candidates?.[0]?.content?.parts || [];
-                const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/') || p.inlineData?.mimeType?.startsWith('image/png'));
+                const imagePart = parts.find((p: any) => p.inlineData);
                 
                 if (imagePart && imagePart.inlineData) {
                     stylizedImageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
                     fileExtension = imagePart.inlineData.mimeType === 'image/png' ? 'png' : 'jpg';
-                    console.log('🎨 Gemini Multimodal Image Stylization successful.');
+                    console.log(`🎨 Gemini image generation successful (${imagePart.inlineData.mimeType}, ${stylizedImageBuffer.length} bytes).`);
                 } else {
-                    console.warn('⚠️ Gemini did not return an image part. Falling back to the raw capture.');
+                    console.warn('⚠️ Gemini did not return an image part. Parts received:', parts.map((p: any) => Object.keys(p)));
+                    console.warn('Falling back to the raw capture.');
                 }
              } catch (geminiError) {
                  console.error('⚠️ Gemini stylization failed. Falling back to raw image.', geminiError);

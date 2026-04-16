@@ -250,11 +250,8 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                                 className="h-20 w-20 rounded-full border-t-8 border-b-8 border-yellow-400"
                             ></motion.div>
-                            <p className="mt-10 font-mono text-4xl font-extrabold tracking-[0.2em] text-[#FFDF00] drop-shadow-[0_0_20px_rgba(255,223,0,0.4)]">
-                                GENERATING MANGA PORTRAIT
-                            </p>
-                            <p className="mt-4 font-mono text-lg tracking-[0.3em] text-white/50 animate-pulse">
-                                GEMINI 2.0 PIPELINE RUNNING
+                            <p className="mt-10 font-mono text-5xl font-extrabold tracking-[0.3em] text-[#FFDF00] drop-shadow-[0_0_20px_rgba(255,223,0,0.4)] animate-pulse">
+                                GENERATING...
                             </p>
                         </motion.div>
                     )}
