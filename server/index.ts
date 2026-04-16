@@ -175,14 +175,14 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
              console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
              try {
-                // Force IMAGE-only response so the model generates instead of asking questions
+                // Force image output while allowing model to reason about the input photo
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.1-flash-image-preview',
                     config: {
-                        responseModalities: ['IMAGE'],
+                        responseModalities: ['TEXT', 'IMAGE'],
                     },
                     contents: [
-                        { text: "Transform this portrait photo into a high-contrast 1990s cyberpunk manga illustration. Use pure black and white ink only. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. No text. No signatures. No cross-hatching or gradients. Output only pure black or pure white. Generate the image now." },
+                        { text: "Edit the attached photo. Redraw the person in the photo as a high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Keep the same face structure and pose from the photo but completely reconstruct it using sharp, angular manga-style features. Drop all realism. Use stark black ink shapes for shading. Pure white background. No text. No signatures. No cross-hatching or gradients. Pure black or pure white only." },
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } }
                     ]
                 });
