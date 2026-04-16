@@ -14,6 +14,23 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const [countdown, setCountdown] = useState<number | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
+    
+    // WebRTC references
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [streamActive, setStreamActive] = useState(false);
+
+    // Initialize the hardware camera instantly on mount so there's no delay when they press the button
+    useEffect(() => {
+        navigator.mediaDevices.getUserMedia({ video: { width: 1920, height: 1080 } })
+            .then(stream => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    setStreamActive(true);
+                }
+            })
+            .catch(err => console.error("WebRTC Arducam Error:", err));
+    }, []);
 
     // Calculate Max Depth for UI display
     const currentMaxDepth = activeCells.reduce((max, cell) => Math.max(max, cell.depth), 0);
@@ -55,44 +72,51 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const triggerCaptureSequence = async () => {
         setFlash(true);
         
-        try {
-            // Hit the Express backend to trigger Arducam instantly
-            const res = await fetch('http://localhost:3001/api/capture', { method: 'POST' });
-            const data = await res.json();
-            
-            setFlash(false);
-            
-            if (data.success) {
-                // Point the UI to the newly captured static public asset
-                setCapturedImageUrl(`http://localhost:3001${data.imageUrl}`);
-                setShowPreview(true);
+        let blobToUpload: Blob | null = null;
+
+        // Draw the exact video frame to the hidden canvas the millisecond the flash happens
+        if (videoRef.current && canvasRef.current && streamActive) {
+            const context = canvasRef.current.getContext('2d');
+            if (context) {
+                // Ensure dimensions match exactly
+                canvasRef.current.width = videoRef.current.videoWidth || 1920;
+                canvasRef.current.height = videoRef.current.videoHeight || 1080;
                 
-                // Keep the preview up for 2 seconds
-                setTimeout(() => {
-                    setShowPreview(false);
-                    // Tell the frontend Grid to update visually
-                    finishCaptureAndAnimate();
-                    
-                    // Dispatch the background Gemini & Jules processing for this specific photo
-                    fetch('http://localhost:3001/api/process-local', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fileName: data.rawFileName })
-                    }).catch(err => console.error("Process local failed:", err));
-                    
-                }, 2000);
+                // "Snap" the photo
+                context.drawImage(videoRef.current, 0, 0);
+                
+                // Convert that canvas frame into a raw JPEG Blob
+                blobToUpload = await new Promise<Blob | null>(resolve => 
+                    canvasRef.current!.toBlob(b => resolve(b), 'image/jpeg', 0.95)
+                );
+                
+                // Display it instantly as a local URL
+                if (blobToUpload) {
+                    setCapturedImageUrl(URL.createObjectURL(blobToUpload));
+                }
             }
-        } catch (error) {
-            console.error("Camera failed:", error);
-            setFlash(false);
-            
-            // Fallback if camera is completely offline or we are testing locally
-            setShowPreview(true);
-            setTimeout(() => { 
-                setShowPreview(false); 
-                finishCaptureAndAnimate(); 
-            }, 2000);
         }
+        
+        // Wait for flash cascade
+        setTimeout(() => {
+            setFlash(false);
+            setShowPreview(true);
+            
+            setTimeout(() => {
+                setShowPreview(false);
+                finishCaptureAndAnimate();
+                
+                // Now pipe the actual Blob up to the Node.js backend for Gemini stylization
+                if (blobToUpload) {
+                    const formData = new FormData();
+                    formData.append('image', blobToUpload, 'capture.jpg');
+                    fetch('http://localhost:3001/api/process', {
+                        method: 'POST',
+                        body: formData
+                    }).catch(console.error);
+                }
+            }, 2000);
+        }, 400);
     };
 
     const startCountdown = () => {
@@ -162,6 +186,20 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
     return (
         <>
+            {/* Live WebRTC Camera Stream Layer */}
+            {/* It sits quietly in the background loading instantly, but only fades into view (z-30) when counting down */}
+            <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`pointer-events-none fixed inset-0 h-full w-full object-cover transition-opacity duration-300 ease-in-out ${
+                    (countdown !== null || showPreview) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
+                }`}
+            />
+            {/* Hidden canvas purely for extracting the still frame */}
+            <canvas ref={canvasRef} className="hidden" />
+
             {/* Cinematic Camera Flash */}
             <AnimatePresence>
                 {flash && (

@@ -92,7 +92,8 @@ echo "🖥️ Launching Kiosk UI..."
 # --disable-infobars: Removes "Chromium is not your default browser" UI
 # --disable-session-crashed-bubble: Prevents more crash bubbles
 # --check-for-update-interval=31536000: Disables update checks completely
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000"
+# --use-fake-ui-for-media-stream: Automatically accepts the "Allow Camera Permissions" popup for our HTML5 logic
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream"
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.
