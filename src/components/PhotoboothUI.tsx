@@ -12,8 +12,6 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const { userCount, activeCells, popEmptyBaseCell } = useMosaicStore();
     const [flash, setFlash] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
-    const [showPreview, setShowPreview] = useState(false);
-    const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
     
     // WebRTC references
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -41,8 +39,8 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     // Calculate Max Depth for UI display
     const currentMaxDepth = activeCells.reduce((max, cell) => Math.max(max, cell.depth), 0);
 
-    const finishCaptureAndAnimate = () => {
-        const hash = Math.random().toString(16).substring(2, 9);
+    const finishCaptureAndAnimate = (customHash?: string, customImageUrl?: string) => {
+        const hash = customHash || Math.random().toString(16).substring(2, 9);
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newColor = getRandomNeonColor();
 
@@ -50,7 +48,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         if (emptyCell) {
             // Base Grid Fill
             onTriggerAnimation(
-                { ...emptyCell, color: newColor, hash, time }, 
+                { ...emptyCell, color: newColor, hash, time, imageUrl: customImageUrl }, 
                 []
             );
         } else {
@@ -67,6 +65,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             useMosaicStore.getState().removeActiveCell(parent);
 
             const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
+            if (customImageUrl) targetCell.imageUrl = customImageUrl;
             
             // Siblings get a flash effect
             const flashingSiblings = siblings.map(s => ({ ...s, flash: 0.5 }));
@@ -103,38 +102,36 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 blobToUpload = await new Promise<Blob | null>(resolve => 
                     canvasRef.current!.toBlob(b => resolve(b), 'image/jpeg', 0.95)
                 );
-                
-                // Display it instantly as a local URL
-                if (blobToUpload) {
-                    setCapturedImageUrl(URL.createObjectURL(blobToUpload));
-                }
             }
         }
         
         // Wait for flash cascade
         setTimeout(() => {
             setFlash(false);
-            setShowPreview(true);
             
-            setTimeout(() => {
-                setShowPreview(false);
-                finishCaptureAndAnimate();
-                
-                // Now pipe the actual Blob up to the Node.js backend for Gemini stylization
-                if (blobToUpload) {
-                    const formData = new FormData();
-                    formData.append('image', blobToUpload, 'capture.jpg');
-                    fetch('http://localhost:3001/api/process', {
-                        method: 'POST',
-                        body: formData
-                    }).catch(console.error);
-                }
-            }, 2000);
+            const tempHash = Math.random().toString(16).substring(2, 9);
+            let tempImageUrl = undefined;
+            if (blobToUpload) {
+                tempImageUrl = URL.createObjectURL(blobToUpload);
+            }
+            
+            // Instantly trigger the native Canvas polaroid animation sequence (the existing one!)
+            finishCaptureAndAnimate(tempHash, tempImageUrl);
+            
+            // Upload the Blob to the Node.js backend for standard Gemini stylization silently
+            if (blobToUpload) {
+                const formData = new FormData();
+                formData.append('image', blobToUpload, 'capture.jpg');
+                fetch('http://localhost:3001/api/process', {
+                    method: 'POST',
+                    body: formData
+                }).catch(console.error);
+            }
         }, 400);
     };
 
     const startCountdown = () => {
-        if (isAnimating || countdown !== null || showPreview) return;
+        if (isAnimating || countdown !== null || flash) return;
         
         setCountdown(3);
     };
@@ -152,7 +149,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     }, [countdown]);
 
     const triggerBulkCapture = () => {
-        if (isAnimating || countdown !== null || showPreview) return;
+        if (isAnimating || countdown !== null || flash) return;
         // Simplified bulk add to avoid breaking anim state, we just add directly for the prototype
         for (let i = 0; i < 20; i++) {
             const hash = Math.random().toString(16).substring(2, 9);
@@ -201,9 +198,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     return (
         <>
             {/* Live WebRTC Camera Stream Layer */}
-            {/* Center-cropped polaroid mirror UI */}
+            {/* The mirror stays until the flash completes, then vanishes so the native canvas animation handles it */}
             <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl transition-all duration-500 ease-out ${
-                    (countdown !== null || showPreview) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
+                    (countdown !== null || flash) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
                 
                 {/* Physical Polaroid Frame container */}
@@ -262,46 +259,6 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 )}
             </AnimatePresence>
 
-            {/* Raw Image Preview */}
-            <AnimatePresence>
-                {showPreview && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.05 }}
-                        transition={{ duration: 0.4, ease: "easeOut" }}
-                        className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md"
-                    >
-                        <div className="relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_100px_rgba(255,255,255,0.15)] transition-transform duration-300 rotate-1">
-                            {capturedImageUrl ? (
-                                <img 
-                                    src={capturedImageUrl} 
-                                    alt="Arducam Capture" 
-                                    className="block aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] object-cover bg-black shadow-inner" 
-                                />
-                            ) : (
-                                /* Fallback Placeholder */
-                                <div className="flex aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] flex-col items-center justify-center bg-black text-gray-500 shadow-inner">
-                                    <span className="mb-4 text-4xl">📸</span>
-                                    <p className="font-mono text-lg tracking-widest text-gray-400">PROCESSING CAPTURE</p>
-                                </div>
-                            )}
-                            
-                            {/* Polaroid Graphic */}
-                            <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
-                                NANOBANANA
-                            </div>
-                            
-                            {/* Loading Badge overlay */}
-                            <div className="absolute top-8 right-8 flex items-center gap-3 rounded-full border border-white/20 bg-black/80 px-4 py-2 font-mono text-xs text-white backdrop-blur-sm shadow-xl">
-                                <div className="h-2 w-2 animate-pulse rounded-full bg-blue-500"></div>
-                                Sending to Jules for processing...
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             {/* Stats Overlay */}
             <div className="absolute top-6 left-6 z-20 flex gap-4 font-mono text-sm text-gray-200">
                 <span className="rounded-lg border border-white/10 bg-[#1a1a1d]/80 px-4 py-2 shadow-lg backdrop-blur-md">
@@ -315,14 +272,14 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             {/* Prototype Controls */}
             <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-3">
                 <button
-                    disabled={isAnimating || countdown !== null || showPreview}
+                    disabled={isAnimating || countdown !== null || flash}
                     onClick={startCountdown}
                     className="flex h-8 w-[120px] items-center justify-center rounded-md border border-white/10 bg-blue-500/90 text-[11px] font-semibold uppercase tracking-wide text-white shadow-xl backdrop-blur-md transition-all hover:-translate-y-0.5 hover:bg-blue-600 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-700/80 disabled:text-gray-400"
                 >
-                    {isAnimating ? 'Pending...' : countdown !== null ? 'Capturing...' : showPreview ? 'Processing...' : 'Add User'}
+                    {isAnimating ? 'Pending...' : countdown !== null ? 'Capturing...' : flash ? 'Processing...' : 'Add User'}
                 </button>
                 <button
-                    disabled={isAnimating || countdown !== null || showPreview}
+                    disabled={isAnimating || countdown !== null || flash}
                     onClick={triggerBulkCapture}
                     className="flex h-8 w-[120px] items-center justify-center rounded-md border border-white/10 bg-blue-500/90 text-[11px] font-semibold uppercase tracking-wide text-white shadow-xl backdrop-blur-md transition-all hover:-translate-y-0.5 hover:bg-blue-600 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-700/80 disabled:text-gray-400"
                 >
