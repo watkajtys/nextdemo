@@ -201,17 +201,24 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     return (
         <>
             {/* Live WebRTC Camera Stream Layer */}
-            {/* Center-cropped square mirror UI */}
+            {/* Center-cropped polaroid mirror UI */}
             <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl transition-all duration-500 ease-out ${
                     (countdown !== null || showPreview) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
-                <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] scale-x-[-1] rounded-3xl border-8 border-white/10 object-cover shadow-[0_0_80px_rgba(255,255,255,0.05)]"
-                />
+                
+                {/* Physical Polaroid Frame container */}
+                <div className="relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-transform duration-700 ease-out -rotate-2">
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] scale-x-[-1] bg-black object-cover shadow-inner"
+                    />
+                    <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
+                        NANOBANANA
+                    </div>
+                </div>
             </div>
             {/* Hidden canvas purely for extracting the still frame */}
             <canvas ref={canvasRef} className="hidden" />
@@ -265,23 +272,28 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         transition={{ duration: 0.4, ease: "easeOut" }}
                         className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md"
                     >
-                        <div className="relative overflow-hidden rounded-3xl border-8 border-white/10 bg-gray-900 shadow-[0_0_80px_rgba(255,255,255,0.05)]">
+                        <div className="relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_100px_rgba(255,255,255,0.15)] transition-transform duration-300 rotate-1">
                             {capturedImageUrl ? (
                                 <img 
                                     src={capturedImageUrl} 
                                     alt="Arducam Capture" 
-                                    className="block aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] object-cover bg-gray-800" 
+                                    className="block aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] object-cover bg-black shadow-inner" 
                                 />
                             ) : (
                                 /* Fallback Placeholder */
-                                <div className="flex aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500">
+                                <div className="flex aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] flex-col items-center justify-center bg-black text-gray-500 shadow-inner">
                                     <span className="mb-4 text-4xl">📸</span>
-                                    <p className="font-mono text-lg tracking-widest text-gray-400">SQUARE CAPTURE PREVIEW</p>
+                                    <p className="font-mono text-lg tracking-widest text-gray-400">PROCESSING CAPTURE</p>
                                 </div>
                             )}
                             
-                            {/* Loading Badge */}
-                            <div className="absolute top-4 right-4 flex items-center gap-3 rounded-full border border-white/20 bg-black/80 px-4 py-2 font-mono text-xs text-white backdrop-blur-sm">
+                            {/* Polaroid Graphic */}
+                            <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
+                                NANOBANANA
+                            </div>
+                            
+                            {/* Loading Badge overlay */}
+                            <div className="absolute top-8 right-8 flex items-center gap-3 rounded-full border border-white/20 bg-black/80 px-4 py-2 font-mono text-xs text-white backdrop-blur-sm shadow-xl">
                                 <div className="h-2 w-2 animate-pulse rounded-full bg-blue-500"></div>
                                 Sending to Jules for processing...
                             </div>
