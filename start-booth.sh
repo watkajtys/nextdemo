@@ -9,6 +9,12 @@ echo "📸 Starting up the Nanobanana Photobooth..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 cd "$SCRIPT_DIR"
 
+echo "⬇️ Fetching latest updates from GitHub..."
+# We use || true so that if the Pi is offline/has no WiFi, 
+# 'git pull' failing won't crash the script due to 'set -e'.
+# It will just gracefully skip and run the local code!
+git pull || true
+
 echo "📦 Checking dependencies..."
 # Best Practice: 'npm ci' is preferred over 'npm install' for production/demos.
 # It strictly uses the lockfile, is usually faster, and guarantees exact versions.
