@@ -297,9 +297,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                             <motion.div 
                                 animate={{ rotate: 360 }}
                                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                                className="h-20 w-20 rounded-full border-t-8 border-b-8 border-yellow-400"
+                                className="h-20 w-20 rounded-full border-t-8 border-b-8 border-[#fbbc05]"
                             ></motion.div>
-                            <p className="mt-10 font-mono text-5xl font-extrabold tracking-[0.3em] text-[#FFDF00] drop-shadow-[0_0_20px_rgba(255,223,0,0.4)] animate-pulse">
+                            <p className="mt-10 font-mono text-5xl font-extrabold tracking-[0.3em] text-[#fbbc05] drop-shadow-[0_0_20px_rgba(251,188,5,0.4)] animate-pulse">
                                 GENERATING...
                             </p>
                             <AnimatePresence mode="wait">
