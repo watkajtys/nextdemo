@@ -20,11 +20,11 @@ interface PhotoboothUIProps {
 }
 
 const WAITING_MESSAGES = [
-    "Stylizing with NanoBanana2",
-    "Sending Your Image To Jules",
-    "We hope you're enjoying NEXT!",
-    "Reticulating Splines",
-    "Working Async While You Enjoy Vegas"
+    "Run better product loops",
+    "Less Noise. More Shipping",
+    "Build Verify Repeat",
+    "The Home of Continuous AI at NEXT",
+    "Automate Product Discovery"
 ];
 
 export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, isAnimating }) => {
@@ -302,18 +302,20 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                             <p className="mt-10 font-mono text-5xl font-extrabold tracking-[0.3em] text-[#fbbc05] drop-shadow-[0_0_20px_rgba(251,188,5,0.4)] animate-pulse">
                                 GENERATING...
                             </p>
-                            <AnimatePresence mode="wait">
-                                <motion.p
-                                    key={loadingMessageIdx}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="mt-6 font-mono text-2xl font-semibold tracking-widest text-[#e5e2e1] drop-shadow-md text-center max-w-lg uppercase"
-                                >
-                                    {WAITING_MESSAGES[loadingMessageIdx]}
-                                </motion.p>
-                            </AnimatePresence>
+                            <div className="relative mt-6 h-12 w-full flex items-center justify-center">
+                                <AnimatePresence>
+                                    <motion.p
+                                        key={loadingMessageIdx}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="absolute font-mono text-2xl font-semibold tracking-widest text-[#e5e2e1] drop-shadow-md text-center max-w-2xl uppercase w-full"
+                                    >
+                                        {WAITING_MESSAGES[loadingMessageIdx]}
+                                    </motion.p>
+                                </AnimatePresence>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
