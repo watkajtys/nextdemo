@@ -178,10 +178,10 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         startCountdownRef.current = startCountdown;
     });
 
-    // Listen for physical button (e.g. Spacebar)
+    // Listen for physical button (e.g. Spacebar or Big USB Button mapped to Enter)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === 'Space') {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') {
                 e.preventDefault(); // Prevent page scroll
                 startCountdownRef.current();
             }
