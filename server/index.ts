@@ -182,8 +182,8 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         responseModalities: ['TEXT', 'IMAGE'],
                     },
                     contents: [
-                        { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } },
-                        { text: "Using the provided image, change the visual style of the person to be a high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Keep the exact same subject, face structure, pose, and background framing unchanged from the provided photo, but completely reconstruct the shading using sharp, angular manga-style features. Drop all realism. Use stark black ink shapes for shading. Pure white background. No text. No signatures. No cross-hatching or gradients. Pure black or pure white only." }
+                        { text: "CRITICAL INSTRUCTION: You are a professional manga artist. DO NOT just apply a black and white filter to this image. You must completely REDRAW the subject from scratch using high-contrast 1990s cyberpunk manga stylization. Fundamentally alter the geometry of the image: give the subject sharp, exaggerated anime facial features, blocky cybernetic elements, and thick, messy ink outlines. Draw it in pure black and white ink only. The final output must look like a scanned, hand-drawn page from a Japanese comic book, abandoning all photographic realism." },
+                        { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } }
                     ]
                 });
 
