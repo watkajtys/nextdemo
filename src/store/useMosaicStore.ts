@@ -17,6 +17,7 @@ interface MosaicState {
     // Cloud Sync & Caching
     syncFromCloud: (cells: Cell[]) => void;
     loadImage: (id: string, url: string) => Promise<void>;
+    updateActiveCellImage: (hash: string, url: string) => void;
 }
 
 export const useMosaicStore = create<MosaicState>((set, get) => ({
@@ -80,6 +81,20 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
                  get().loadImage(cell.hash || '', cell.imageUrl);
              }
         });
+    },
+
+    updateActiveCellImage: (hash, newImageUrl) => {
+        set((state) => {
+            const nextCache = { ...state.imageCache };
+            delete nextCache[hash]; // Invalidate cache to force a reload from the cloud
+            return {
+                imageCache: nextCache,
+                activeCells: state.activeCells.map(c => 
+                    c.hash === hash ? { ...c, imageUrl: newImageUrl } : c
+                )
+            };
+        });
+        get().loadImage(hash, newImageUrl);
     },
 
     loadImage: async (id: string, url: string) => {

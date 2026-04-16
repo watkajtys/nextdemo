@@ -9,7 +9,7 @@ interface PhotoboothUIProps {
 }
 
 export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, isAnimating }) => {
-    const { userCount, activeCells, popEmptyBaseCell } = useMosaicStore();
+    const { userCount, activeCells, popEmptyBaseCell, updateActiveCellImage } = useMosaicStore();
     const [flash, setFlash] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     
@@ -128,7 +128,15 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 fetch(`${cloudServerUrl}/api/process`, {
                     method: 'POST',
                     body: formData
-                }).catch(console.error);
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data?.printData?.imageUrl) {
+                        const finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
+                        updateActiveCellImage(tempHash, finalCloudUrl);
+                    }
+                })
+                .catch(console.error);
             }
         }, 400);
     };
