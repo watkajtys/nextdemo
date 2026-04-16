@@ -170,20 +170,38 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
 
         // 1. STYLIZE VIA GEMINI
         let stylizedImageBuffer = req.file.buffer;
+        let fileExtension = 'jpg';
 
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
              console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
              try {
-                // Example integration for Gemini 2.0 Flash
-                // const response = await ai.models.generateContent({ ... });
-                console.log('🎨 Gemini stylization successful (Simulated).');
+                // Call Gemini 2.0 Flash to act as a vector artist and draw an SVG of the person!
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.0-flash',
+                    contents: [
+                        { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white.\n\nCRITICAL INSTRUCTION: You must study the attached portrait and output your final illustration strictly as raw XML <svg> code. Use a 1080x1080 viewBox." },
+                        { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype || 'image/jpeg' }}
+                    ]
+                });
+                
+                const responseText = response.text();
+                // Strip markdown blocks to isolate the pure SVG
+                const svgMatch = responseText?.match(/<svg[\s\S]*<\/svg>/i);
+                
+                if (svgMatch && svgMatch[0]) {
+                    stylizedImageBuffer = Buffer.from(svgMatch[0], 'utf-8');
+                    fileExtension = 'svg'; // Save the final graphic as an SVG
+                    console.log('🎨 Gemini Nanobanana stylization successful (SVG generated).');
+                } else {
+                    console.warn('⚠️ Gemini generated invalid SVG. Falling back to raw image.');
+                }
              } catch (geminiError) {
                  console.error('⚠️ Gemini stylization failed. Falling back to raw image.', geminiError);
              }
         }
 
         // 2. NON-BLOCKING FILE SAVE (Simulating Firebase Storage)
-        const imageFileName = `${uniqueId}.jpg`;
+        const imageFileName = `${uniqueId}.${fileExtension}`;
         const imagePath = path.join(UPLOADS_DIR, imageFileName);
         
         // Use async writeFile to avoid blocking the Node event loop
