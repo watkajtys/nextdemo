@@ -23,7 +23,7 @@ const WAITING_MESSAGES = [
     "Hi! We're Jules",
     "The Home of Continuous AI at NEXT",
     "We're working on your portrait!",
-    "Jules will add your portrait to the mosaic",
+    "Jules will add it to the mosaic",
     "Run better product loops",
     "Less Noise. More Shipping",
     "Build Verify Repeat",
