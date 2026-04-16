@@ -202,20 +202,13 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl transition-all duration-500 ease-out ${
                     (countdown !== null || flash) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
-                
-                {/* Physical Polaroid Frame container */}
-                <div className="relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-transform duration-700 ease-out -rotate-2">
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] scale-x-[-1] bg-black object-cover shadow-inner"
-                    />
-                    <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
-                        NANOBANANA
-                    </div>
-                </div>
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] scale-x-[-1] rounded-3xl border-8 border-white/10 object-cover shadow-[0_0_80px_rgba(255,255,255,0.05)]"
+                />
             </div>
             {/* Hidden canvas purely for extracting the still frame */}
             <canvas ref={canvasRef} className="hidden" />
