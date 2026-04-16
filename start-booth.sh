@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# Best Practice: Exit immediately if a command exits with a non-zero status
+set -e
+
+echo "📸 Starting up the Nanobanana Photobooth..."
+
+# Best Practice: Robust path resolution (handles symlinks gracefully)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "📦 Checking dependencies..."
+# Best Practice: 'npm ci' is preferred over 'npm install' for production/demos.
+# It strictly uses the lockfile, is usually faster, and guarantees exact versions.
+# We also skip audits to speed up booting.
+if [ -f "package-lock.json" ]; then
+    npm ci --prefer-offline --no-audit
+else
+    npm install --no-audit
+fi
+
+echo "🔑 Checking for configuration..."
+if [ ! -f ".env" ]; then
+    echo "⚠️ No .env file found! Creating one from .env.example..."
+    cp .env.example .env
+    echo "Please make sure to add your GEMINI_API_KEY to the .env file later!"
+fi
+
+# Best Practice: Disable screensaver, power management, and hide the mouse for a kiosk
+echo "🖥️ Configuring display for Kiosk mode..."
+export DISPLAY=:0
+# Prevent screen from blanking (requires xset)
+if command -v xset &> /dev/null; then
+    xset s off || true
+    xset -dpms || true
+    xset s noblank || true
+fi
+# Hide mouse cursor (requires 'unclutter' to be installed on the Pi)
+if command -v unclutter &> /dev/null; then
+    unclutter -idle 0.1 -root &
+    UNCLUTTER_PID=$!
+fi
+
+echo "🚀 Starting servers..."
+
+# Start the Node/Express backend in the background
+npm run start:server &
+SERVER_PID=$!
+
+# Start the Vite frontend in the background
+npm run dev &
+VITE_PID=$!
+
+# Best Practice: Port Polling. Instead of an arbitrary 'sleep', we wait for the port to open.
+# This prevents the white screen of death if Chromium launches faster than Vite.
+echo "⏳ Waiting for frontend server to become available on port 3000..."
+MAX_RETRIES=60
+RETRY_COUNT=0
+# Loop until a curl to localhost:3000 succeeds
+while ! curl --output /dev/null --silent --head --fail http://localhost:3000; do
+    sleep 0.5
+    RETRY_COUNT=$((RETRY_COUNT+1))
+    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+        echo "❌ Timeout waiting for server on port 3000"
+        # We clean up everything if the server never comes online
+        kill $SERVER_PID $VITE_PID $UNCLUTTER_PID 2>/dev/null || true
+        exit 1
+    fi
+done
+echo "✅ Server is up!"
+
+echo "🖥️ Launching Kiosk UI..."
+
+# Best Practice: Hardened Kiosk flags for a seamless demo experience:
+# --noerrdialogs: Prevents "Chromium crashed, restore tabs?" messages
+# --disable-infobars: Removes "Chromium is not your default browser" UI
+# --disable-session-crashed-bubble: Prevents more crash bubbles
+# --check-for-update-interval=31536000: Disables update checks completely
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000"
+
+# Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
+# we want the script to continue to the standard trap and shutdown correctly.
+set +e
+
+if command -v chromium-browser &> /dev/null; then
+    chromium-browser $CHROMIUM_FLAGS http://localhost:3000
+elif command -v chromium &> /dev/null; then
+    chromium $CHROMIUM_FLAGS http://localhost:3000
+else
+    echo "🌍 Chromium not found. Open http://localhost:3000 in your browser!"
+fi
+
+# Best Practice: Catch termination and script EXIT to cleanly kill everything we started.
+trap 'echo "🛑 Shutting down Photobooth..."; kill $SERVER_PID $VITE_PID $UNCLUTTER_PID 2>/dev/null || true' SIGINT SIGTERM EXIT
+
+# Best Practice: 'wait -n' waits for ANY of the background processes to exit.
+# This means if either the backend or frontend crashes, the script cleanly exits.
+# If wrapped in an OS service (like systemd), this ensures the whole app automatically restarts!
+wait -n $SERVER_PID $VITE_PID
