@@ -265,16 +265,16 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         transition={{ duration: 0.4, ease: "easeOut" }}
                         className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md"
                     >
-                        <div className="relative overflow-hidden rounded-xl border-4 border-white/20 bg-gray-900 shadow-2xl shadow-black/50">
+                        <div className="relative overflow-hidden rounded-3xl border-8 border-white/10 bg-gray-900 shadow-[0_0_80px_rgba(255,255,255,0.05)]">
                             {capturedImageUrl ? (
                                 <img 
                                     src={capturedImageUrl} 
                                     alt="Arducam Capture" 
-                                    className="flex aspect-square h-[50vh] max-h-[800px] object-cover bg-gray-800 shadow-inner" 
+                                    className="block aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] object-cover bg-gray-800" 
                                 />
                             ) : (
                                 /* Fallback Placeholder */
-                                <div className="flex aspect-square h-[50vh] max-h-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500 shadow-inner">
+                                <div className="flex aspect-square h-[75vh] w-[75vh] max-h-[800px] max-w-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500">
                                     <span className="mb-4 text-4xl">📸</span>
                                     <p className="font-mono text-lg tracking-widest text-gray-400">SQUARE CAPTURE PREVIEW</p>
                                 </div>
