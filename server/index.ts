@@ -175,15 +175,19 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
              console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
              try {
+                // Force IMAGE-only response so the model generates instead of asking questions
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.1-flash-image-preview',
+                    config: {
+                        responseModalities: ['IMAGE'],
+                    },
                     contents: [
-                        { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white" },
+                        { text: "Transform this portrait photo into a high-contrast 1990s cyberpunk manga illustration. Use pure black and white ink only. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. No text. No signatures. No cross-hatching or gradients. Output only pure black or pure white. Generate the image now." },
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } }
                     ]
                 });
                 
-                // Extract the generated image from the response (matching official JS SDK docs)
+                // Extract the generated image from the response
                 for (const part of response.candidates?.[0]?.content?.parts || []) {
                     if ((part as any).inlineData) {
                         const imageData = (part as any).inlineData.data;
@@ -192,7 +196,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         console.log(`🎨 Nano Banana 2 stylization successful (${stylizedImageBuffer.length} bytes).`);
                         break;
                     } else if ((part as any).text) {
-                        console.log('📝 Nano Banana 2 text response:', (part as any).text);
+                        console.log('📝 Nano Banana 2 returned text instead of image:', (part as any).text.substring(0, 100));
                     }
                 }
                 
