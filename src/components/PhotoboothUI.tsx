@@ -12,6 +12,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const { userCount, activeCells, popEmptyBaseCell, updateActiveCellImage } = useMosaicStore();
     const [flash, setFlash] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
+    const [processing, setProcessing] = useState(false);
     
     // WebRTC references
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -108,15 +109,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         // Wait for flash cascade
         setTimeout(() => {
             setFlash(false);
+            setProcessing(true);
             
             const tempHash = Math.random().toString(16).substring(2, 9);
-            let tempImageUrl = undefined;
-            if (blobToUpload) {
-                tempImageUrl = URL.createObjectURL(blobToUpload);
-            }
-            
-            // Instantly trigger the native Canvas polaroid animation sequence (the existing one!)
-            finishCaptureAndAnimate(tempHash, tempImageUrl);
             
             // Upload the Blob to the Cloud Server for Gemini stylization silently
             if (blobToUpload) {
@@ -131,18 +126,29 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 })
                 .then(res => res.json())
                 .then(data => {
+                    let finalCloudUrl = undefined;
                     if (data?.printData?.imageUrl) {
-                        const finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
-                        updateActiveCellImage(tempHash, finalCloudUrl);
+                        finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
                     }
+                    
+                    // Release the wait screen lock and visibly launch the grid animation!
+                    setProcessing(false);
+                    finishCaptureAndAnimate(tempHash, finalCloudUrl);
                 })
-                .catch(console.error);
+                .catch((err) => {
+                    console.error(err);
+                    setProcessing(false);
+                    // Fallback to plotting the raw camera frame if the cloud errors out
+                    finishCaptureAndAnimate(tempHash, URL.createObjectURL(blobToUpload!));
+                });
+            } else {
+                setProcessing(false);
             }
         }, 400);
     };
 
     const startCountdown = () => {
-        if (isAnimating || countdown !== null || flash) return;
+        if (isAnimating || countdown !== null || flash || processing) return;
         
         setCountdown(3);
     };
@@ -197,9 +203,11 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     // Listen for physical button (e.g. Spacebar or Big USB Button mapped to Enter)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') {
-                e.preventDefault(); // Prevent page scroll
-                startCountdownRef.current();
+            // Space, Enter, or NumpadEnter binds to Arcade buttons
+            if (e.key === ' ' || e.key === 'Enter' || e.code === 'NumpadEnter') {
+                if (!isAnimating && countdown === null && !flash && !processing) {
+                    startCountdown();
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -210,11 +218,11 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         <>
             {/* Live WebRTC Camera Stream Layer */}
             {/* The mirror stays until the flash completes, then vanishes so the native canvas animation handles it */}
-            <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-xl transition-all duration-500 ease-out ${
-                    (countdown !== null || flash) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
+            <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/95 backdrop-blur-3xl transition-all duration-500 ease-out ${
+                    (countdown !== null || flash || processing) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
                 {/* Polaroid Frame container (Upright) */}
-                <div className="relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)]">
+                <div className={`relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-in-out ${processing ? 'opacity-0 scale-90 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
                     <video
                         ref={videoRef}
                         autoPlay
@@ -226,6 +234,31 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         NANOBANANA
                     </div>
                 </div>
+
+                {/* AI Generative Wait Screen overlay */}
+                <AnimatePresence>
+                    {processing && (
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 1.1 }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            className="absolute inset-0 z-50 flex flex-col items-center justify-center"
+                        >
+                            <motion.div 
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                                className="h-20 w-20 rounded-full border-t-8 border-b-8 border-yellow-400"
+                            ></motion.div>
+                            <p className="mt-10 font-mono text-4xl font-extrabold tracking-[0.2em] text-[#FFDF00] drop-shadow-[0_0_20px_rgba(255,223,0,0.4)]">
+                                GENERATING MANGA PORTRAIT
+                            </p>
+                            <p className="mt-4 font-mono text-lg tracking-[0.3em] text-white/50 animate-pulse">
+                                GEMINI 2.0 PIPELINE RUNNING
+                            </p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
             {/* Hidden canvas purely for extracting the still frame */}
             <canvas ref={canvasRef} className="hidden" />
