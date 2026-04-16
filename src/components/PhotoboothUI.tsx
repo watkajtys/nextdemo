@@ -3,6 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMosaicStore } from '../store/useMosaicStore';
 import { Cell, MAX_DEPTH, subdivideCell, getRandomNeonColor } from '../utils/mosaic';
 
+// Helper: load an image from URL and return the HTMLImageElement once ready
+function preloadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
 interface PhotoboothUIProps {
     onTriggerAnimation: (targetCell: Cell, siblings: Cell[]) => void;
     isAnimating: boolean;
@@ -113,7 +124,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             
             const tempHash = Math.random().toString(16).substring(2, 9);
             
-            // Upload the Blob to the Cloud Server for Gemini stylization silently
+            // Upload the Blob to the Cloud Server for Nano Banana 2 stylization
             if (blobToUpload) {
                 const formData = new FormData();
                 formData.append('image', blobToUpload, 'capture.jpg');
@@ -125,20 +136,35 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                     body: formData
                 })
                 .then(res => res.json())
-                .then(data => {
-                    let finalCloudUrl = undefined;
+                .then(async (data) => {
+                    let finalCloudUrl: string | undefined;
                     if (data?.printData?.imageUrl) {
                         finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
                     }
                     
-                    // Release the wait screen lock and visibly launch the grid animation!
+                    // Pre-load the image into the browser and inject into Zustand cache
+                    // BEFORE dismissing the generating screen. This guarantees the canvas
+                    // renderer finds the cached image on the very first animation frame.
+                    if (finalCloudUrl) {
+                        try {
+                            const img = await preloadImage(finalCloudUrl);
+                            // Inject directly into the Zustand image cache
+                            useMosaicStore.setState((state) => ({
+                                imageCache: { ...state.imageCache, [tempHash]: img }
+                            }));
+                        } catch (e) {
+                            console.error('Failed to preload stylized image:', e);
+                        }
+                    }
+                    
+                    // NOW release the wait screen and trigger the grid animation
                     setProcessing(false);
                     finishCaptureAndAnimate(tempHash, finalCloudUrl);
                 })
                 .catch((err) => {
                     console.error(err);
                     setProcessing(false);
-                    // Fallback to plotting the raw camera frame if the cloud errors out
+                    // Fallback: use the raw camera frame
                     finishCaptureAndAnimate(tempHash, URL.createObjectURL(blobToUpload!));
                 });
             } else {

@@ -258,8 +258,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                     }
                     ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
                 } else if (photoW > 10) {
+                    // No image cached yet — just show the cell background color (no vector placeholder)
                     ctx.globalAlpha = eased;
-                    drawGraphicNovelAvatar(ctx, photoX, photoY, photoW, photoH, cell.hash || 'default', cell.color || '#fff');
                 }
                 ctx.restore();
 
@@ -382,8 +382,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                     }
                     ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
                 } else if (photoW > 10) {
+                    // No image cached yet — just show the cell background color (no vector placeholder)
                     ctx.globalAlpha = fadeProgress;
-                    drawGraphicNovelAvatar(ctx, photoX, photoY, photoW, photoH, targetCell.hash || 'default', targetCell.color || '#fff');
                 }
                 ctx.restore();
 
