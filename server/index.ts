@@ -43,9 +43,9 @@ const processLimiter = rateLimit({
 });
 
 // Set up Multer with strict limits for memory storage
-const upload = multer({ 
+const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_FILE_SIZE } 
+    limits: { fileSize: MAX_FILE_SIZE }
 });
 
 // Initialize Gemini
@@ -71,13 +71,13 @@ app.post('/api/capture', async (req: Request, res: Response): Promise<void> => {
         const uniqueId = `raw-${Date.now()}`;
         const rawFileName = `${uniqueId}.jpg`;
         const rawFilePath = path.join(UPLOADS_DIR, rawFileName);
-        
+
         console.log('📸 Triggering hardware Arducam...');
-        
+
         // Runs standard Raspberry Pi camera command.
         // We use || true so it doesn't crash the Node server if run on a Mac/Windows machine for local dev
         await execPromise(`libcamera-still -o "${rawFilePath}" --timeout 500 --width 1920 --height 1080 --nopreview || true`);
-        
+
         // Fallback for Mac local dev: if the file wasn't created because libcamera-still failed, create a dummy file
         try {
             await fs.access(rawFilePath);
@@ -86,7 +86,7 @@ app.post('/api/capture', async (req: Request, res: Response): Promise<void> => {
         }
 
         console.log(`📸 Arducam capture complete: ${rawFileName}`);
-        
+
         res.status(200).json({ success: true, imageUrl: `/portraits/${rawFileName}`, rawFileName });
     } catch (error) {
         console.error('❌ Error triggering Arducam:', error);
@@ -113,13 +113,13 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
         let stylizedImageBuffer = await fs.readFile(rawFilePath);
 
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
-             console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
-             try {
+            console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
+            try {
                 // Example integration for Gemini
                 console.log('🎨 Gemini stylization successful (Simulated).');
-             } catch (geminiError) {
-                 console.error('⚠️ Gemini stylization failed.', geminiError);
-             }
+            } catch (geminiError) {
+                console.error('⚠️ Gemini stylization failed.', geminiError);
+            }
         }
 
         const imageFileName = `${uniqueId}.jpg`;
@@ -137,7 +137,7 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 3. Decide where it fits best in our Quadtree mosaic.
 4. Create a new JSON file at src/data/portraits/${uniqueId}.json.`,
                 source: { github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic', baseBranch: 'main' },
-                autoPr: true, 
+                autoPr: true,
             }).catch(e => console.error('❌ Failed to start Jules:', e));
         }
 
@@ -173,8 +173,8 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         let fileExtension = 'jpg';
 
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
-             console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
-             try {
+            console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
+            try {
                 // Force image output while allowing model to reason about the input photo
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.1-flash-image-preview',
@@ -183,10 +183,10 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                     },
                     contents: [
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } },
-                        { text: "Using the provided image, change the visual style of the person to be a high-contrast 1990s cyberpunk manga illustration. Use pure black and white ink only. Completely reconstruct the subject using sharp, angular manga-style features. Drop all realism, use stark black ink shapes for shading. Keep the exact same subject, pose, and background framing unchanged." }
+                        { text: "Using the provided image, change the visual style of the person to be a high-contrast 1990s cyberpunk manga illustration. Use pure black and white ink only. Use simple lines. Do not overdetail the scene. Completely reconstruct the subject using sharp, angular manga-style features. Drop all realism, use stark black ink shapes for shading. Keep the exact same subject, pose, and background framing unchanged. Do not overdetail the image. A manga printed on cheap paper aesthetic" }
                     ]
                 });
-                
+
                 // Extract the generated image from the response
                 for (const part of response.candidates?.[0]?.content?.parts || []) {
                     if ((part as any).inlineData) {
@@ -199,19 +199,19 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         console.log('📝 Nano Banana 2 returned text instead of image:', (part as any).text.substring(0, 100));
                     }
                 }
-                
+
                 if (fileExtension === 'jpg') {
                     console.warn('⚠️ Nano Banana 2 did not return an image. Falling back to raw capture.');
                 }
-             } catch (geminiError) {
-                 console.error('⚠️ Nano Banana 2 stylization failed. Falling back to raw image.', geminiError);
-             }
+            } catch (geminiError) {
+                console.error('⚠️ Nano Banana 2 stylization failed. Falling back to raw image.', geminiError);
+            }
         }
 
         // 2. NON-BLOCKING FILE SAVE (Simulating Firebase Storage)
         const imageFileName = `${uniqueId}.${fileExtension}`;
         const imagePath = path.join(UPLOADS_DIR, imageFileName);
-        
+
         // Use async writeFile to avoid blocking the Node event loop
         await fs.writeFile(imagePath, stylizedImageBuffer);
         const publicImageUrl = `/portraits/${imageFileName}`;
@@ -221,7 +221,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         // 3. DISPATCH TO JULES (Fire and Forget)
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
-            
+
             jules.session({
                 prompt: `
                     1. A new portrait was taken: ${publicImageUrl}
@@ -230,11 +230,11 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                     4. Create a new JSON file at src/data/portraits/${uniqueId}.json.
                     5. Include grid coordinates, image path, and a 'julesThoughtProcess' field.
                 `,
-                source: { 
-                    github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic', 
-                    baseBranch: 'main' 
+                source: {
+                    github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic',
+                    baseBranch: 'main'
                 },
-                autoPr: true, 
+                autoPr: true,
             }).then(session => {
                 console.log(`🤖 Jules Session Started! ID: ${session.id}`);
             }).catch(e => {
@@ -293,12 +293,12 @@ function verifyGitHubSignature(req: any, res: Response, next: NextFunction) {
  */
 app.post('/api/webhook/github', verifyGitHubSignature, (req: Request, res: Response) => {
     const event = req.headers['x-github-event'];
-    
+
     if (event === 'push' && req.body.ref === 'refs/heads/main') {
         console.log('🔔 GitHub Webhook verified: Jules merged a new portrait!');
-        
+
         // Acknowledge immediately
-        res.status(200).send('OK'); 
+        res.status(200).send('OK');
 
         // Trigger Firebase Firestore sync or local cache invalidation here
         console.log('🔄 Syncing changes to real-time database...');
@@ -327,7 +327,7 @@ const shutdown = () => {
         console.log('💤 Server closed.');
         process.exit(0);
     });
-    
+
     // Force close after 10s
     setTimeout(() => {
         console.error('🚨 Could not close connections in time, forcefully shutting down');

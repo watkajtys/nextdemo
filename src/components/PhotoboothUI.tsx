@@ -20,10 +20,13 @@ interface PhotoboothUIProps {
 }
 
 const WAITING_MESSAGES = [
+    "Hi! We're Jules",
+    "The Home of Continuous AI at NEXT",
+    "We're working on your portrait!",
+    "Jules will add your portrait to the mosaic",
     "Run better product loops",
     "Less Noise. More Shipping",
     "Build Verify Repeat",
-    "The Home of Continuous AI at NEXT",
     "Automate Product Discovery"
 ];
 
@@ -33,7 +36,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const [countdown, setCountdown] = useState<number | null>(null);
     const [processing, setProcessing] = useState(false);
     const [loadingMessageIdx, setLoadingMessageIdx] = useState(0);
-    
+
     // WebRTC references
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,12 +58,12 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
     // Initialize the hardware camera instantly on mount so there's no delay when they press the button
     useEffect(() => {
-        navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                width: { ideal: 1920 }, 
+        navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1920 },
                 height: { ideal: 1080 },
                 advanced: [{ focusMode: "continuous" } as any]
-            } 
+            }
         })
             .then(stream => {
                 if (videoRef.current) {
@@ -83,7 +86,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         if (emptyCell) {
             // Base Grid Fill
             onTriggerAnimation(
-                { ...emptyCell, color: newColor, hash, time, imageUrl: customImageUrl }, 
+                { ...emptyCell, color: newColor, hash, time, imageUrl: customImageUrl },
                 []
             );
         } else {
@@ -101,17 +104,17 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
             const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
             if (customImageUrl) targetCell.imageUrl = customImageUrl;
-            
+
             // Siblings get a flash effect
             const flashingSiblings = siblings.map(s => ({ ...s, flash: 0.5 }));
-            
+
             onTriggerAnimation(targetCell, flashingSiblings);
         }
     };
 
     const triggerCaptureSequence = async () => {
         setFlash(true);
-        
+
         let blobToUpload: Blob | null = null;
 
         // Draw the exact video frame to the hidden canvas the millisecond the flash happens
@@ -120,76 +123,76 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             if (context) {
                 const videoW = videoRef.current.videoWidth || 1920;
                 const videoH = videoRef.current.videoHeight || 1080;
-                
+
                 // Calculate square crop from the center of the video feed
                 const size = Math.min(videoW, videoH);
                 const sx = (videoW - size) / 2;
                 const sy = (videoH - size) / 2;
-                
+
                 // Set the exact square dimensions on the canvas
                 canvasRef.current.width = size;
                 canvasRef.current.height = size;
-                
+
                 // "Snap" the photo using the precise source crop
                 context.drawImage(videoRef.current, sx, sy, size, size, 0, 0, size, size);
-                
+
                 // Convert that square canvas frame into a raw JPEG Blob
-                blobToUpload = await new Promise<Blob | null>(resolve => 
+                blobToUpload = await new Promise<Blob | null>(resolve =>
                     canvasRef.current!.toBlob(b => resolve(b), 'image/jpeg', 0.95)
                 );
             }
         }
-        
+
         // Wait for flash cascade
         setTimeout(() => {
             setFlash(false);
             setProcessing(true);
-            
+
             const tempHash = Math.random().toString(16).substring(2, 9);
-            
+
             // Upload the Blob to the Cloud Server for Nano Banana 2 stylization
             if (blobToUpload) {
                 const formData = new FormData();
                 formData.append('image', blobToUpload, 'capture.jpg');
-                
+
                 const cloudServerUrl = import.meta.env.VITE_API_URL || 'http://204.168.131.95:3001';
-                
+
                 fetch(`${cloudServerUrl}/api/process`, {
                     method: 'POST',
                     body: formData
                 })
-                .then(res => res.json())
-                .then(async (data) => {
-                    let finalCloudUrl: string | undefined;
-                    if (data?.printData?.imageUrl) {
-                        finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
-                    }
-                    
-                    // Pre-load the image into the browser and inject into Zustand cache
-                    // BEFORE dismissing the generating screen. This guarantees the canvas
-                    // renderer finds the cached image on the very first animation frame.
-                    if (finalCloudUrl) {
-                        try {
-                            const img = await preloadImage(finalCloudUrl);
-                            // Inject directly into the Zustand image cache
-                            useMosaicStore.setState((state) => ({
-                                imageCache: { ...state.imageCache, [tempHash]: img }
-                            }));
-                        } catch (e) {
-                            console.error('Failed to preload stylized image:', e);
+                    .then(res => res.json())
+                    .then(async (data) => {
+                        let finalCloudUrl: string | undefined;
+                        if (data?.printData?.imageUrl) {
+                            finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
                         }
-                    }
-                    
-                    // NOW release the wait screen and trigger the grid animation
-                    setProcessing(false);
-                    finishCaptureAndAnimate(tempHash, finalCloudUrl);
-                })
-                .catch((err) => {
-                    console.error(err);
-                    setProcessing(false);
-                    // Fallback: use the raw camera frame
-                    finishCaptureAndAnimate(tempHash, URL.createObjectURL(blobToUpload!));
-                });
+
+                        // Pre-load the image into the browser and inject into Zustand cache
+                        // BEFORE dismissing the generating screen. This guarantees the canvas
+                        // renderer finds the cached image on the very first animation frame.
+                        if (finalCloudUrl) {
+                            try {
+                                const img = await preloadImage(finalCloudUrl);
+                                // Inject directly into the Zustand image cache
+                                useMosaicStore.setState((state) => ({
+                                    imageCache: { ...state.imageCache, [tempHash]: img }
+                                }));
+                            } catch (e) {
+                                console.error('Failed to preload stylized image:', e);
+                            }
+                        }
+
+                        // NOW release the wait screen and trigger the grid animation
+                        setProcessing(false);
+                        finishCaptureAndAnimate(tempHash, finalCloudUrl);
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        setProcessing(false);
+                        // Fallback: use the raw camera frame
+                        finishCaptureAndAnimate(tempHash, URL.createObjectURL(blobToUpload!));
+                    });
             } else {
                 setProcessing(false);
             }
@@ -198,7 +201,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
     const startCountdown = () => {
         if (isAnimating || countdown !== null || flash || processing) return;
-        
+
         setCountdown(3);
     };
 
@@ -237,7 +240,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
                 const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
                 targetCell.flash = 0.8;
-                
+
                 useMosaicStore.getState().addBulkActiveCells([...siblings.map(s => ({ ...s, flash: 0.5 })), targetCell]);
             }
             useMosaicStore.getState().incrementUserCount();
@@ -267,8 +270,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         <>
             {/* Live WebRTC Camera Stream Layer */}
             {/* The mirror stays until the flash completes, then vanishes so the native canvas animation handles it */}
-            <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/95 backdrop-blur-3xl transition-all duration-500 ease-out ${
-                    (countdown !== null || flash || processing) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
+            <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/95 backdrop-blur-3xl transition-all duration-500 ease-out ${(countdown !== null || flash || processing) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
                 {/* Polaroid Frame container (Upright) */}
                 <div className={`relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-in-out ${processing ? 'opacity-0 scale-90 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
@@ -280,21 +282,21 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         className="aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] scale-x-[-1] bg-black object-cover shadow-inner"
                     />
                     <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
-                        NANOBANANA
+                        JULES AT NEXT 2026
                     </div>
                 </div>
 
                 {/* AI Generative Wait Screen overlay */}
                 <AnimatePresence>
                     {processing && (
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 1.1 }}
                             transition={{ duration: 0.5, ease: "easeOut" }}
                             className="absolute inset-0 z-50 flex flex-col items-center justify-center"
                         >
-                            <motion.div 
+                            <motion.div
                                 animate={{ rotate: 360 }}
                                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                                 className="h-20 w-20 rounded-full border-t-8 border-b-8 border-[#fbbc05]"
