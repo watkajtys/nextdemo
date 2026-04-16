@@ -175,25 +175,24 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
              console.log('🎨 Calling Gemini to apply Nanobanana stylization...');
              try {
-                // Call Gemini 2.0 Flash to act as a vector artist and draw an SVG of the person!
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.0-flash',
                     contents: [
-                        { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white.\n\nCRITICAL INSTRUCTION: You must study the attached portrait and output your final illustration strictly as raw XML <svg> code. Use a 1080x1080 viewBox." },
+                        { text: "A high-contrast 1990s cyberpunk manga illustration in pure black and white ink. Completely reconstruct the subject using sharp, angular manga-style facial features. Drop all realism. Use stark black ink shapes for shading. Pure white background. no text. no signatures. no cross hatching or gradients. pure black or pure white" },
                         { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype || 'image/jpeg' }}
                     ]
                 });
                 
-                const responseText = response.text();
-                // Strip markdown blocks to isolate the pure SVG
-                const svgMatch = responseText?.match(/<svg[\s\S]*<\/svg>/i);
+                // Extract the multimodal pixel output returned by Gemini 2.0 Flash (if present)
+                const parts = response.candidates?.[0]?.content?.parts || [];
+                const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/') || p.inlineData?.mimeType?.startsWith('image/png'));
                 
-                if (svgMatch && svgMatch[0]) {
-                    stylizedImageBuffer = Buffer.from(svgMatch[0], 'utf-8');
-                    fileExtension = 'svg'; // Save the final graphic as an SVG
-                    console.log('🎨 Gemini Nanobanana stylization successful (SVG generated).');
+                if (imagePart && imagePart.inlineData) {
+                    stylizedImageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+                    fileExtension = imagePart.inlineData.mimeType === 'image/png' ? 'png' : 'jpg';
+                    console.log('🎨 Gemini Multimodal Image Stylization successful.');
                 } else {
-                    console.warn('⚠️ Gemini generated invalid SVG. Falling back to raw image.');
+                    console.warn('⚠️ Gemini did not return an image part. Falling back to the raw capture.');
                 }
              } catch (geminiError) {
                  console.error('⚠️ Gemini stylization failed. Falling back to raw image.', geminiError);
