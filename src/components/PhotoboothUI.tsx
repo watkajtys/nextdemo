@@ -22,7 +22,13 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
     // Initialize the hardware camera instantly on mount so there's no delay when they press the button
     useEffect(() => {
-        navigator.mediaDevices.getUserMedia({ video: { width: 1920, height: 1080 } })
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 1920 }, 
+                height: { ideal: 1080 },
+                advanced: [{ focusMode: "continuous" } as any]
+            } 
+        })
             .then(stream => {
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
