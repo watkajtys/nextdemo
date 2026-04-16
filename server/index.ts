@@ -183,7 +183,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                     },
                     contents: [
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } },
-                        { text: "Using the provided image, change the visual style of the person to be a high-contrast 1990s cyberpunk manga illustration. Use pure black and white ink only. Completely reconstruct the subject using sharp, angular manga-style features. Drop all realism, use stark black ink shapes for shading. Keep the exact same subject, pose, and background framing unchanged." }
+                        { text: "Using the provided image, change the visual style of the person to be a highly simplified cyberpunk illustration optimized for a low-res thermal printer. Use ONLY absolute pure black and solid white blocks. STRICTLY NO grayscale, no subtle shading, no fine lines, no cross-hatching, and no small details. Reconstruct the subject using large, bold ink shapes, thick outlines, and extreme contrast. Keep the exact same subject, pose, and background framing unchanged." }
                     ]
                 });
                 
