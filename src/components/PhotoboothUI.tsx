@@ -84,14 +84,22 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         if (videoRef.current && canvasRef.current && streamActive) {
             const context = canvasRef.current.getContext('2d');
             if (context) {
-                // Ensure dimensions match exactly
-                canvasRef.current.width = videoRef.current.videoWidth || 1920;
-                canvasRef.current.height = videoRef.current.videoHeight || 1080;
+                const videoW = videoRef.current.videoWidth || 1920;
+                const videoH = videoRef.current.videoHeight || 1080;
                 
-                // "Snap" the photo
-                context.drawImage(videoRef.current, 0, 0);
+                // Calculate square crop from the center of the video feed
+                const size = Math.min(videoW, videoH);
+                const sx = (videoW - size) / 2;
+                const sy = (videoH - size) / 2;
                 
-                // Convert that canvas frame into a raw JPEG Blob
+                // Set the exact square dimensions on the canvas
+                canvasRef.current.width = size;
+                canvasRef.current.height = size;
+                
+                // "Snap" the photo using the precise source crop
+                context.drawImage(videoRef.current, sx, sy, size, size, 0, 0, size, size);
+                
+                // Convert that square canvas frame into a raw JPEG Blob
                 blobToUpload = await new Promise<Blob | null>(resolve => 
                     canvasRef.current!.toBlob(b => resolve(b), 'image/jpeg', 0.95)
                 );
@@ -260,13 +268,13 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                                 <img 
                                     src={capturedImageUrl} 
                                     alt="Arducam Capture" 
-                                    className="flex h-[60vh] w-[80vw] max-w-[800px] object-cover bg-gray-800" 
+                                    className="flex aspect-square h-[50vh] max-h-[800px] object-cover bg-gray-800 shadow-inner" 
                                 />
                             ) : (
                                 /* Fallback Placeholder */
-                                <div className="flex h-[60vh] w-[80vw] max-w-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500">
+                                <div className="flex aspect-square h-[50vh] max-h-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500 shadow-inner">
                                     <span className="mb-4 text-4xl">📸</span>
-                                    <p className="font-mono text-lg tracking-widest text-gray-400">RAW CAPTURE PREVIEW</p>
+                                    <p className="font-mono text-lg tracking-widest text-gray-400">SQUARE CAPTURE PREVIEW</p>
                                 </div>
                             )}
                             
