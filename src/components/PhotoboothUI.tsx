@@ -13,6 +13,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const [flash, setFlash] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     const [showPreview, setShowPreview] = useState(false);
+    const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
 
     // Calculate Max Depth for UI display
     const currentMaxDepth = activeCells.reduce((max, cell) => Math.max(max, cell.depth), 0);
@@ -51,21 +52,47 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         }
     };
 
-    const triggerCaptureSequence = () => {
-        // Cinematic Flash (Extended to 400ms)
+    const triggerCaptureSequence = async () => {
         setFlash(true);
         
-        setTimeout(() => {
-            setFlash(false);
-            // Show the raw capture preview immediately after the flash peaks
-            setShowPreview(true);
+        try {
+            // Hit the Express backend to trigger Arducam instantly
+            const res = await fetch('http://localhost:3001/api/capture', { method: 'POST' });
+            const data = await res.json();
             
-            // Hold the preview for 2 seconds, then kick off the processing animation
-            setTimeout(() => {
-                setShowPreview(false);
-                finishCaptureAndAnimate();
+            setFlash(false);
+            
+            if (data.success) {
+                // Point the UI to the newly captured static public asset
+                setCapturedImageUrl(`http://localhost:3001${data.imageUrl}`);
+                setShowPreview(true);
+                
+                // Keep the preview up for 2 seconds
+                setTimeout(() => {
+                    setShowPreview(false);
+                    // Tell the frontend Grid to update visually
+                    finishCaptureAndAnimate();
+                    
+                    // Dispatch the background Gemini & Jules processing for this specific photo
+                    fetch('http://localhost:3001/api/process-local', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fileName: data.rawFileName })
+                    }).catch(err => console.error("Process local failed:", err));
+                    
+                }, 2000);
+            }
+        } catch (error) {
+            console.error("Camera failed:", error);
+            setFlash(false);
+            
+            // Fallback if camera is completely offline or we are testing locally
+            setShowPreview(true);
+            setTimeout(() => { 
+                setShowPreview(false); 
+                finishCaptureAndAnimate(); 
             }, 2000);
-        }, 400);
+        }
     };
 
     const startCountdown = () => {
@@ -185,11 +212,19 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                         className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md"
                     >
                         <div className="relative overflow-hidden rounded-xl border-4 border-white/20 bg-gray-900 shadow-2xl shadow-black/50">
-                            {/* Placeholder for actual Arducam photo */}
-                            <div className="flex h-[60vh] w-[80vw] max-w-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500">
-                                <span className="mb-4 text-4xl">📸</span>
-                                <p className="font-mono text-lg tracking-widest text-gray-400">RAW CAPTURE PREVIEW</p>
-                            </div>
+                            {capturedImageUrl ? (
+                                <img 
+                                    src={capturedImageUrl} 
+                                    alt="Arducam Capture" 
+                                    className="flex h-[60vh] w-[80vw] max-w-[800px] object-cover bg-gray-800" 
+                                />
+                            ) : (
+                                /* Fallback Placeholder */
+                                <div className="flex h-[60vh] w-[80vw] max-w-[800px] flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-black text-gray-500">
+                                    <span className="mb-4 text-4xl">📸</span>
+                                    <p className="font-mono text-lg tracking-widest text-gray-400">RAW CAPTURE PREVIEW</p>
+                                </div>
+                            )}
                             
                             {/* Loading Badge */}
                             <div className="absolute top-4 right-4 flex items-center gap-3 rounded-full border border-white/20 bg-black/80 px-4 py-2 font-mono text-xs text-white backdrop-blur-sm">
