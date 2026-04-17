@@ -21,6 +21,7 @@ export interface Cell {
     hoverProgress?: number;
     imageUrl?: string;
     julesThoughtProcess?: string;
+    storyPanel?: string;
 }
 
 export const SVG_SCALE = (620 / 134) * (GRID_WORLD_SIZE / 800);

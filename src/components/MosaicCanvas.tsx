@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMosaicStore } from '../store/useMosaicStore';
 import {
     GRID_WORLD_SIZE,
@@ -29,6 +30,7 @@ interface MosaicCanvasProps {
 export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimationComplete }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const [openedCell, setOpenedCell] = useState<Cell | null>(null);
     
     // High-frequency mutable state kept in refs to avoid React re-renders
     const cameraRef = useRef<Camera>({ x: GRID_WORLD_SIZE / 2, y: GRID_WORLD_SIZE / 2, zoom: 1 });
@@ -264,39 +266,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                 ctx.restore();
 
                 if (eased > 0.3) {
-                    const textAlpha = (eased - 0.3) * 1.4;
-                    ctx.globalAlpha = Math.min(1, Math.max(0, textAlpha));
-
-                    const bottomY = photoY + photoH;
-                    const bottomH = currH - (border + photoH);
-
-                    const scale = (eased * 1.2) / camera.zoom;
-
-                    const iconX = currX + 50 * scale;
-                    const iconY = bottomY + bottomH / 2;
-
-                    ctx.strokeStyle = '#888';
-                    ctx.lineWidth = 3 * scale;
-                    ctx.beginPath();
-                    ctx.arc(iconX, iconY, 10 * scale, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(iconX, iconY - 25 * scale);
-                    ctx.lineTo(iconX, iconY - 10 * scale);
-                    ctx.moveTo(iconX, iconY + 10 * scale);
-                    ctx.lineTo(iconX, iconY + 25 * scale);
-                    ctx.stroke();
-
-                    ctx.fillStyle = '#111';
-                    ctx.font = `bold ${22 * scale}px monospace`;
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(cell.hash || 'a1b2c3d', iconX + 30 * scale, iconY - 12 * scale);
-
-                    ctx.fillStyle = '#666';
-                    ctx.font = `${16 * scale}px sans-serif`;
-                    ctx.fillText(cell.time || '12:00 PM', iconX + 30 * scale, iconY + 12 * scale);
-
                     ctx.globalAlpha = 1.0;
                 }
 
@@ -388,39 +357,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                 ctx.restore();
 
                 if (currentW > bigW * 0.3) {
-                    const textAlpha = Math.min(1, (currentW - bigW * 0.3) / (bigW * 0.3));
-                    ctx.globalAlpha = textAlpha;
-
-                    const bottomY = photoY + photoH;
-                    const bottomH = currentH - (border + photoH);
-
-                    const scale = ((currentW / bigW) * 1.2) / camera.zoom;
-
-                    const iconX = currentX + 50 * scale;
-                    const iconY = bottomY + bottomH / 2;
-
-                    ctx.strokeStyle = '#888';
-                    ctx.lineWidth = 3 * scale;
-                    ctx.beginPath();
-                    ctx.arc(iconX, iconY, 10 * scale, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(iconX, iconY - 25 * scale);
-                    ctx.lineTo(iconX, iconY - 10 * scale);
-                    ctx.moveTo(iconX, iconY + 10 * scale);
-                    ctx.lineTo(iconX, iconY + 25 * scale);
-                    ctx.stroke();
-
-                    ctx.fillStyle = '#111';
-                    ctx.font = `bold ${22 * scale}px monospace`;
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(targetCell.hash || 'a1b2c3d', iconX + 30 * scale, iconY - 12 * scale);
-
-                    ctx.fillStyle = '#666';
-                    ctx.font = `${16 * scale}px sans-serif`;
-                    ctx.fillText(targetCell.time || '12:00 PM', iconX + 30 * scale, iconY + 12 * scale);
-
                     ctx.globalAlpha = 1.0;
                 }
 
@@ -524,6 +460,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (!interactionRef.current.pointerMoved) {
             if (clickedCellRef.current) {
                 clickedCellRef.current = null;
+                setOpenedCell(null);
                 return;
             }
             const pos = getMousePos(e);
@@ -533,6 +470,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                 if (pos.worldX >= cell.x && pos.worldX <= cell.x + cell.w &&
                     pos.worldY >= cell.y && pos.worldY <= cell.y + cell.h) {
                     clickedCellRef.current = cell;
+                    setOpenedCell(cell);
                     break;
                 }
             }
@@ -542,6 +480,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const handlePointerLeave = () => {
         interactionRef.current.isPointerDown = false;
         clickedCellRef.current = null;
+        setOpenedCell(null);
         mouseRef.current.x = -1000;
         mouseRef.current.y = -1000;
     };
@@ -591,7 +530,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     };
 
     return (
-        <div ref={containerRef} className="absolute top-0 left-0 w-full h-full z-10">
+        <div ref={containerRef} className="absolute top-0 left-0 w-full h-full z-10 overflow-hidden">
             <canvas
                 ref={canvasRef}
                 className="w-full h-full bg-[#0f0f11] touch-none"
@@ -604,6 +543,37 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
             />
+            {/* Story Panel HTML Overlay perfectly mapped to canvas active card space */}
+            <AnimatePresence>
+                 {openedCell && (
+                     <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        transition={{ delay: 0.2, duration: 0.3 }}
+                        className="pointer-events-none absolute inset-0 flex items-center justify-center p-4"
+                     >
+                         <div className="relative text-[#111] pointer-events-auto flex flex-col justify-end" style={{ 
+                             width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
+                             height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 120 : 880
+                         }}>
+                             <div className="w-full h-[120px] p-6 flex flex-col justify-center">
+                                  <div className="flex items-center gap-4 mb-2">
+                                    <div className="h-6 w-6 rounded-full border-[3px] border-[#888] flex items-center justify-center">
+                                        <div className="w-4 h-[3px] bg-[#888] rotate-45 absolute" />
+                                        <div className="w-4 h-[3px] bg-[#888] -rotate-45 absolute" />
+                                    </div>
+                                    <h3 className="font-mono text-2xl font-bold tracking-wider m-0 leading-none">{openedCell.hash || 'a1b2c3d'}</h3>
+                                    <span className="text-gray-500 font-sans text-base ml-auto">{openedCell.time}</span>
+                                  </div>
+                                  <p className="font-sans text-sm text-gray-700 leading-snug line-clamp-3">
+                                      {openedCell.storyPanel || 'Processing neural scan... waiting for Jules.'}
+                                  </p>
+                             </div>
+                         </div>
+                     </motion.div>
+                 )}
+            </AnimatePresence>
         </div>
     );
 };
