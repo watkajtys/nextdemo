@@ -38,6 +38,8 @@ trap cleanup SIGINT SIGTERM EXIT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 cd "$SCRIPT_DIR"
 
+export DISPLAY=:0
+
 echo "🩺 Running Pi Doctor..."
 if [ -f "./pi-doctor.sh" ]; then
     bash ./pi-doctor.sh
@@ -115,11 +117,11 @@ fi
 echo "🚀 Starting servers..."
 
 # Start the Node/Express backend in the background
-npm run start:server &
+npm run start:server > server.log 2>&1 &
 SERVER_PID=$!
 
 # Start the Vite frontend in the background
-npm run dev &
+npm run dev > vite.log 2>&1 &
 VITE_PID=$!
 
 # Best Practice: Port Polling. Instead of an arbitrary 'sleep', we wait for the port to open.
@@ -154,8 +156,8 @@ echo "🖥️ Launching Kiosk UI..."
 # --disable-features=Translate,TranslateUI: Prevents a translate bar from appearing over the UI.
 # --disable-background-networking: Stops Chromium from phoning home for telemetry/safebrowsing over conference wifi.
 # --disable-sync: Disables all sync features since there is no user profile.
-# --disk-cache-dir=/dev/null: Sends the disk cache to the void, preventing SSD writes and cache bloat.
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --disk-cache-dir=/dev/null --js-flags=\"--max-old-space-size=512\""
+# --disk-cache-dir=/tmp/chromium-cache: Use a real temp dir instead of /dev/null to avoid errors.
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --disk-cache-dir=/tmp/chromium-cache --js-flags=\"--max-old-space-size=512\""
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.
