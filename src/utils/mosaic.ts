@@ -22,6 +22,7 @@ export interface Cell {
     imageUrl?: string;
     julesThoughtProcess?: string;
     storyPanel?: string;
+    julesSessionId?: string;
 }
 
 export const SVG_SCALE = (620 / 134) * (GRID_WORLD_SIZE / 800);

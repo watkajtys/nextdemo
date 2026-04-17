@@ -129,21 +129,27 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 
         console.log(`☁️ Image saved to local/cloud storage: ${publicImageUrl}`);
 
+        let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
-            jules.session({
-                prompt: `1. A new portrait was taken: ${publicImageUrl}
+            try {
+                const session = await jules.session({
+                    prompt: `1. A new portrait was taken: ${publicImageUrl}
 2. Analyze the colors and composition.
 3. Decide where it fits best in our Quadtree mosaic.
 4. Create a new JSON file at src/data/portraits/${uniqueId}.json.`,
-                source: { github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic', baseBranch: 'main' },
-                autoPr: true,
-            }).catch(e => console.error('❌ Failed to start Jules:', e));
+                    source: { github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic', baseBranch: 'main' },
+                    autoPr: true,
+                });
+                julesSessionId = session.id;
+            } catch(e) {
+                console.error('❌ Failed to start Jules:', e);
+            }
         }
 
         res.status(200).json({
             status: 'success',
-            printData: { imageUrl: publicImageUrl, portraitId: uniqueId }
+            printData: { imageUrl: publicImageUrl, portraitId: uniqueId, julesSessionId }
         });
 
     } catch (error) {
@@ -219,42 +225,45 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         console.log(`☁️ Image saved to local/cloud storage: ${publicImageUrl}`);
 
         // 3. DISPATCH TO JULES (Fire and Forget)
+        let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
 
             const base64Image = stylizedImageBuffer.toString('base64');
             const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
 
-            jules.session({
-                prompt: `
-                    1. We have captured a new 1-bit high-contrast portrait. Here is the image data:
-                    
-                    ![portrait](data:${mimeType};base64,${base64Image})
-                    
-                    2. Choose a vibrant, random cyberpunk color (e.g., neon pink, cyan, electric yellow). Generate its Hex code.
-                    3. Write a script to process the attached base64 image: replace all the solid WHITE pixels with your chosen cyberpunk color, leaving the BLACK pixels intact as black.
-                    4. Save the resulting dyed image permanently to public/portraits/${imageFileName} in the repository.
-                    5. Decide where the block fits best in our Quadtree mosaic.
-                    6. Create a new JSON file at src/data/portraits/${uniqueId}.json. The JSON should include:
-                       - The base color hex code you chose.
-                       - The grid coordinates in the quadtree where this block resides.
-                       - The path to the newly dyed image.
-                       - A 'storyPanel' field containing a short, highly creative cyberpunk backstory or flavor text inspired by the character/pose in the image.
-                       - A 'julesThoughtProcess' field explaining why you chose this color and position.
-                    
-                    Note: The mosaic block will initially render as a solid square using this hex color, and the image itself will only be revealed when the user interacts with the block.
-                `,
-                source: {
-                    github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic',
-                    baseBranch: 'main'
-                },
-                requireApproval: false,
-                autoPr: true,
-            }).then(session => {
+            try {
+                const session = await jules.session({
+                    prompt: `
+                        1. We have captured a new 1-bit high-contrast portrait. Here is the image data:
+                        
+                        ![portrait](data:${mimeType};base64,${base64Image})
+                        
+                        2. Choose a vibrant, random cyberpunk color (e.g., neon pink, cyan, electric yellow). Generate its Hex code.
+                        3. Write a script to process the attached base64 image: replace all the solid WHITE pixels with your chosen cyberpunk color, leaving the BLACK pixels intact as black.
+                        4. Save the resulting dyed image permanently to public/portraits/${imageFileName} in the repository.
+                        5. Decide where the block fits best in our Quadtree mosaic.
+                        6. Create a new JSON file at src/data/portraits/${uniqueId}.json. The JSON should include:
+                           - The base color hex code you chose.
+                           - The grid coordinates in the quadtree where this block resides.
+                           - The path to the newly dyed image.
+                           - A 'storyPanel' field containing a short, highly creative cyberpunk backstory or flavor text inspired by the character/pose in the image.
+                           - A 'julesThoughtProcess' field explaining why you chose this color and position.
+                        
+                        Note: The mosaic block will initially render as a solid square using this hex color, and the image itself will only be revealed when the user interacts with the block.
+                    `,
+                    source: {
+                        github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic',
+                        baseBranch: 'main'
+                    },
+                    requireApproval: false,
+                    autoPr: true,
+                });
+                julesSessionId = session.id;
                 console.log(`🤖 Jules Session Started! ID: ${session.id}`);
-            }).catch(e => {
+            } catch(e) {
                 console.error('❌ Failed to start Jules session:', e);
-            });
+            }
         } else {
             console.log(`⚠️ JULES_API_KEY missing. Skipping AI Developer orchestration.`);
         }
@@ -266,7 +275,8 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
             printData: {
                 imageUrl: publicImageUrl,
                 qrCodeUrl: `https://nanobanana-mosaic.web.app/?portrait=${uniqueId}`,
-                portraitId: uniqueId
+                portraitId: uniqueId,
+                julesSessionId
             }
         });
 

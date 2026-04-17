@@ -77,7 +77,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     // Calculate Max Depth for UI display
     const currentMaxDepth = activeCells.reduce((max, cell) => Math.max(max, cell.depth), 0);
 
-    const finishCaptureAndAnimate = (customHash?: string, customImageUrl?: string) => {
+    const finishCaptureAndAnimate = (customHash?: string, customImageUrl?: string, julesSessionId?: string) => {
         const hash = customHash || Math.random().toString(16).substring(2, 9);
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newColor = getRandomNeonColor();
@@ -86,7 +86,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         if (emptyCell) {
             // Base Grid Fill
             onTriggerAnimation(
-                { ...emptyCell, color: newColor, hash, time, imageUrl: customImageUrl },
+                { ...emptyCell, color: newColor, hash, time, imageUrl: customImageUrl, julesSessionId },
                 []
             );
         } else {
@@ -104,6 +104,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
             const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
             if (customImageUrl) targetCell.imageUrl = customImageUrl;
+            if (julesSessionId) targetCell.julesSessionId = julesSessionId;
 
             // Siblings get a flash effect
             const flashingSiblings = siblings.map(s => ({ ...s, flash: 0.5 }));
@@ -185,7 +186,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
                         // NOW release the wait screen and trigger the grid animation
                         setProcessing(false);
-                        finishCaptureAndAnimate(tempHash, finalCloudUrl);
+                        finishCaptureAndAnimate(tempHash, finalCloudUrl, data?.printData?.julesSessionId);
                     })
                     .catch((err) => {
                         console.error(err);

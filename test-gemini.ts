@@ -3,7 +3,7 @@ import * as fs from 'fs';
 
 async function main() {
   const ai = new GoogleGenAI({ apiKey: 'AIzaSyCh--jIrj84UEICdDVOW2sXpf5-mjbxBNY' });
-  const imageData = fs.readFileSync('/Users/theair/WebstormProjects/nextdemo/public/test.jpg'); // We need a real photo
+  const imageData = fs.readFileSync('/Users/theair/WebstormProjects/nextdemo/test.jpg'); // We need a real photo
   const base64Image = imageData.toString('base64');
   
   const prompt = [
