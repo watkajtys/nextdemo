@@ -5,6 +5,15 @@ set -e
 
 echo "📸 Starting up the Nanobanana Photobooth..."
 
+echo -e "\n⏳ Auto-boot sequence initiated..."
+echo "🛑 Press and hold ENTER (Arcade Button) NOW to cancel auto-boot and drop to shell..."
+# The -t 5 flag waits 5 seconds. The -n 1 flag captures any single keystroke instantly.
+if read -t 5 -n 1; then
+    echo -e "\n\n🛑 Boot canceled by user input. Dropping to shell."
+    exit 0
+fi
+echo -e "\n🚀 Proceeding with startup sequence..."
+
 # Bulletproof: Kill any zombie processes from previous crashed runs before starting
 echo "🧹 Cleaning up old processes..."
 pkill -f "chromium" || true
@@ -19,6 +28,13 @@ trap 'echo "🛑 Shutting down Photobooth..."; kill $SERVER_PID $VITE_PID $UNCLU
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 cd "$SCRIPT_DIR"
 
+echo "🩺 Running Pi Doctor..."
+if [ -f "./pi-doctor.sh" ]; then
+    bash ./pi-doctor.sh
+else
+    echo "⚠️ pi-doctor.sh not found. Skipping doctor checks."
+fi
+
 echo "⬇️ Fetching latest updates from GitHub..."
 # We use || true so that if the Pi is offline/has no WiFi, 
 # 'git pull' failing won't crash the script due to 'set -e'.
@@ -30,9 +46,17 @@ echo "📦 Checking dependencies..."
 # It strictly uses the lockfile, is usually faster, and guarantees exact versions.
 # We also skip audits to speed up booting.
 if [ -f "package-lock.json" ]; then
-    npm ci --prefer-offline --no-audit
+    if ! npm ci --prefer-offline --no-audit; then
+        echo "⚠️ npm ci failed! Attempting AUTO-FIX by clearing node_modules..."
+        rm -rf node_modules
+        npm ci --no-audit
+    fi
 else
-    npm install --no-audit
+    if ! npm install --no-audit; then
+        echo "⚠️ npm install failed! Attempting AUTO-FIX by clearing node_modules..."
+        rm -rf node_modules
+        npm install --no-audit
+    fi
 fi
 
 echo "🔑 Checking for configuration..."
@@ -93,7 +117,9 @@ echo "🖥️ Launching Kiosk UI..."
 # --disable-session-crashed-bubble: Prevents more crash bubbles
 # --check-for-update-interval=31536000: Disables update checks completely
 # --use-fake-ui-for-media-stream: Automatically accepts the "Allow Camera Permissions" popup for our HTML5 logic
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream"
+# --disable-dev-shm-usage: CRITICAL FOR PI. Prevents Chromium from overflowing the tiny /dev/shm shared memory cache and crashing.
+# --js-flags="--max-old-space-size=512": Caps the Javascript V8 engine RAM usage to 512MB to prevent long-term memory leaks.
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --js-flags=\"--max-old-space-size=512\""
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.

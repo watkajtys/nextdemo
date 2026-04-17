@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { useMosaicStore } from './store/useMosaicStore';
 import { getInitialBaseCells, Cell } from './utils/mosaic';
 import { MosaicCanvas } from './components/MosaicCanvas';

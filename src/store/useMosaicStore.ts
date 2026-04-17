@@ -104,11 +104,16 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
         try {
             const img = new Image();
             img.crossOrigin = "anonymous"; // Important for canvas drawing from external URLs (like Firebase)
+
+            // Fix absolute path mapping for GitHub Pages subpath hosting vs localhost root
+            const safeUrl = url.startsWith('/') && !url.startsWith('//') 
+                ? import.meta.env.BASE_URL + url.slice(1) 
+                : url;
             
             await new Promise((resolve, reject) => {
                 img.onload = resolve;
                 img.onerror = reject;
-                img.src = url;
+                img.src = safeUrl;
             });
 
             set((state) => ({
