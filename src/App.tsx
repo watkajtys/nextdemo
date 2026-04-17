@@ -19,7 +19,7 @@ export default function App() {
         const activeToRestore: Cell[] = [];
         
         for (let i = 0; i < livePortraits.length; i++) {
-             let payload = livePortraits[i];
+             let payload = livePortraits[i] as any;
              payload = { ...payload, hash: payload.julesSessionId || payload.imageUrl || payload.id } as Partial<Cell>;
              
              // If payload lacks explicit layout, pop an available slot from the hit map
