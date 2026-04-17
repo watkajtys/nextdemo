@@ -75,6 +75,7 @@ export default function thermal() {
 
   const find = async (): Promise<device | null> => {
     const devs = await scan();
+    // Prioritize USB default, then any USB printer
     return (
       devs.find((d) => d.usb && d.def) ||
       devs.find((d) => d.usb) ||
