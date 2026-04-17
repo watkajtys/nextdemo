@@ -248,6 +248,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                     github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic',
                     baseBranch: 'main'
                 },
+                requireApproval: false,
                 autoPr: true,
             }).then(session => {
                 console.log(`🤖 Jules Session Started! ID: ${session.id}`);
