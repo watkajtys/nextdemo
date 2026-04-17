@@ -271,9 +271,8 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         const handleKeyDown = (e: KeyboardEvent) => {
             // Space, Enter, or NumpadEnter binds to Arcade buttons
             if (e.key === ' ' || e.key === 'Enter' || e.code === 'NumpadEnter') {
-                if (!isAnimating && countdown === null && !flash && !processing) {
-                    startCountdown();
-                }
+                e.preventDefault();
+                startCountdownRef.current();
             }
         };
         window.addEventListener('keydown', handleKeyDown);

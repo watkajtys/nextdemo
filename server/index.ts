@@ -130,9 +130,10 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
         }
 
         const uniqueId = `portrait-${Date.now()}`;
-        console.log(`✨ Processing local file ${fileName} as ${uniqueId}...`);
+        const safeFileName = path.basename(fileName);
+        console.log(`✨ Processing local file ${safeFileName} as ${uniqueId}...`);
 
-        const rawFilePath = path.join(UPLOADS_DIR, fileName);
+        const rawFilePath = path.join(UPLOADS_DIR, safeFileName);
         let stylizedImageBuffer = await fs.readFile(rawFilePath);
 
         if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
@@ -187,11 +188,14 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
  */
 app.post('/api/save-for-print', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { imageUrl, portraitId, julesSessionId } = req.body;
+        let { imageUrl, portraitId, julesSessionId } = req.body;
         if (!imageUrl || !portraitId) {
             res.status(400).json({ error: 'Missing imageUrl or portraitId' });
             return;
         }
+
+        // Sanitize to prevent path traversal
+        portraitId = path.basename(portraitId);
 
         console.log(`🖨️  Receiving print asset from cloud: ${portraitId}`);
         const response = await fetch(imageUrl);
@@ -232,7 +236,7 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
             ctx.drawImage(portraitImg, sx, sy, cropSize, cropSize, 0, 0, labelWidth, labelWidth);
 
             // Generate QR Code (Bottom Left)
-            const mosaicUrl = `https://nanobanana-mosaic.web.app/?portrait=${portraitId}`;
+            const mosaicUrl = `https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`;
             const qrBuffer = await QRCode.toBuffer(mosaicUrl, {
                 margin: 1,
                 scale: 10,
@@ -254,7 +258,7 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
             ctx.font = 'bold 50px "LabelMono", "Courier New", monospace';
             ctx.fillText('JULES AT NEXT', qrX + qrSize + 50, qrY + 250);
             if (julesSessionId) {
-                ctx.fillText(`SESSION: ${julesSessionId.substring(0, 8)}`, qrX + qrSize + 50, qrY + 330);
+                ctx.fillText(`SESSION: ${String(julesSessionId).substring(0, 8)}`, qrX + qrSize + 50, qrY + 330);
             }
 
             const labelBuffer = canvas.toBuffer('image/png');
@@ -387,6 +391,12 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                            - A 'julesThoughtProcess' field explaining why you chose this color and position.
                         
                         Note: The mosaic block will initially render as a solid square using this hex color, and the image itself will only be revealed when the user interacts with the block.
+                        
+                        CRITICAL CONSTRAINTS:
+                        - Do NOT update any dependencies.
+                        - Do NOT refactor existing code.
+                        - Do NOT do anything clever or make assumptions outside this scope.
+                        - STICK STRICTLY TO THE TASK ABOVE.
                     `,
                     source: {
                         github: process.env.GITHUB_REPO || 'watkajtys/nextdemo',
@@ -410,7 +420,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
             message: 'Image processed and Jules task dispatched.',
             printData: {
                 imageUrl: publicImageUrl,
-                qrCodeUrl: `https://nanobanana-mosaic.web.app/?portrait=${uniqueId}`,
+                qrCodeUrl: `https://watkajtys.github.io/nextdemo/?portrait=${uniqueId}`,
                 portraitId: uniqueId,
                 julesSessionId
             }
