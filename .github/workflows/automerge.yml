@@ -7,15 +7,21 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  actions: write
 
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    # Automatically merges PRs created by Jules (who uses the owner's token)
-    if: true
+    # Securely merges ONLY PRs created by the repository owner (or Jules utilizing the owner's token)
+    if: github.actor == github.repository_owner || github.actor == 'google-labs-jules[bot]'
     steps:
       - name: Squash and Merge AI PR
         run: gh pr merge --squash --admin "$PR_URL"
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Trigger Deploy
+        run: gh workflow run deploy.yml --ref main
+        env:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}

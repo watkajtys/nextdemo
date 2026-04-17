@@ -157,6 +157,25 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const absoluteImageUrl = `${protocol}://${host}${publicImageUrl}`;
 
+        // Save local JSON aggressively so the frontend persists it across reloads 
+        // and it remains clickable even before Jules agent completes and merges the PR.
+        try {
+            const neonColors = ['#ff0055', '#00ffcc', '#ffcc00', '#ff00ff', '#00ccff', '#39ff14'];
+            const randomColor = neonColors[Math.floor(Math.random() * neonColors.length)];
+            const localJsonPath = path.join(process.cwd(), 'src', 'data', 'portraits', `${uniqueId}.json`);
+            
+            await fs.writeFile(localJsonPath, JSON.stringify({
+                id: uniqueId,
+                imageUrl: publicImageUrl,
+                color: randomColor,
+                storyPanel: "Awaiting Jules network link... Processing Neural Scan.",
+                julesThoughtProcess: "Local placeholder generated while waiting for Jules SDK to complete."
+            }, null, 2));
+            console.log(`💾 Local metadata JSON saved: ${localJsonPath}`);
+        } catch (e) {
+            console.error('Failed to write local json stub', e);
+        }
+
         let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
@@ -166,8 +185,7 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 ![portrait](${absoluteImageUrl})
 
 2. Analyze the colors and composition.
-3. Decide where it fits best in our Quadtree mosaic.
-4. Create a new JSON file at src/data/portraits/${uniqueId}.json.`,
+3. Create a new JSON file at src/data/portraits/${uniqueId}.json. DO NOT set x, y, w, or h coordinates in the JSON, as our frontend will dynamically assign them based on our SVG area layout bounds.`,
                     source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
                     autoPr: true,
                 });
@@ -263,9 +281,20 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
             ctx.fillText('NANO BANANA', qrX + qrSize + 50, qrY + 150);
             ctx.font = 'bold 50px "LabelMono", "Courier New", monospace';
             ctx.fillText('JULES AT NEXT', qrX + qrSize + 50, qrY + 250);
+            
+            ctx.font = 'bold 35px "LabelMono", "Courier New", monospace';
             if (julesSessionId) {
-                ctx.fillText(`SESSION: ${String(julesSessionId).substring(0, 8)}`, qrX + qrSize + 50, qrY + 330);
+                // Ensure it fits, wrapping or truncating if necessary. Typically IDs like ses_xxxxxxxx
+                const displayId = String(julesSessionId).length > 20 ? 
+                    String(julesSessionId).substring(0, 20) + '...' : String(julesSessionId);
+                ctx.fillText(`SESSION: ${displayId}`, qrX + qrSize + 50, qrY + 310);
             }
+            const timeGenerated = new Date().toLocaleString('en-US', { 
+                month: 'short', day: 'numeric', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit', 
+                hour12: false 
+            });
+            ctx.fillText(`TIME: ${timeGenerated}`, qrX + qrSize + 50, qrY + 360);
 
             const labelBuffer = canvas.toBuffer('image/png');
             const labelPath = path.join(SPOOL_DIR, `${portraitId}-label.png`);
@@ -374,6 +403,25 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
         const absoluteImageUrl = `${protocol}://${host}${publicImageUrl}`;
 
+        // Save local JSON aggressively so the frontend persists it across reloads 
+        // and it remains clickable even before Jules agent completes and merges the PR.
+        try {
+            const neonColors = ['#ff0055', '#00ffcc', '#ffcc00', '#ff00ff', '#00ccff', '#39ff14'];
+            const randomColor = neonColors[Math.floor(Math.random() * neonColors.length)];
+            const localJsonPath = path.join(process.cwd(), 'src', 'data', 'portraits', `${uniqueId}.json`);
+            
+            await fs.writeFile(localJsonPath, JSON.stringify({
+                id: uniqueId,
+                imageUrl: publicImageUrl,
+                color: randomColor,
+                storyPanel: "Awaiting Jules network link... Processing Neural Scan.",
+                julesThoughtProcess: "Local placeholder generated while waiting for Jules SDK to complete."
+            }, null, 2));
+            console.log(`💾 Local metadata JSON saved: ${localJsonPath}`);
+        } catch (e) {
+            console.error('Failed to write local json stub', e);
+        }
+
         // 3. DISPATCH TO JULES (Fire and Forget)
         let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
@@ -389,15 +437,14 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         2. Choose a vibrant, random cyberpunk color (e.g., neon pink, cyan, electric yellow). Generate its Hex code.
                         3. Write a script to download the image from the URL provided above and process it: replace all the solid WHITE pixels with your chosen cyberpunk color, leaving the BLACK pixels intact as black.
                         4. Save the resulting dyed image permanently to public/portraits/${imageFileName} in the repository.
-                        5. Decide where the block fits best in our Quadtree mosaic.
-                        6. Create a new JSON file at src/data/portraits/${uniqueId}.json. The JSON should include:
+                        5. Create a new JSON file at src/data/portraits/${uniqueId}.json. The JSON should include:
                            - The base color hex code you chose.
-                           - The grid coordinates in the quadtree where this block resides.
                            - The path to the newly dyed image.
                            - A 'storyPanel' field containing a short, highly creative cyberpunk backstory or flavor text inspired by the character/pose in the image.
-                           - A 'julesThoughtProcess' field explaining why you chose this color and position.
+                           - A 'julesThoughtProcess' field explaining why you chose this color.
                         
                         Note: The mosaic block will initially render as a solid square using this hex color, and the image itself will only be revealed when the user interacts with the block.
+                        CRITICAL: Do NOT attempt to specify grid coordinates (x, y, w, h) in the JSON. The frontend will dynamically assign those based on our SVG mask bounds.
                         
                         CRITICAL CONSTRAINTS:
                         - Do NOT update any dependencies.

@@ -19,14 +19,16 @@ export default function App() {
         const activeToRestore: Cell[] = [];
         
         for (let i = 0; i < livePortraits.length; i++) {
-             const payload = livePortraits[i];
+             let payload = livePortraits[i];
+             payload = { ...payload, hash: payload.julesSessionId || payload.imageUrl || payload.id } as Partial<Cell>;
+             
              // If payload lacks explicit layout, pop an available slot from the hit map
              if (payload.x !== undefined && payload.y !== undefined) {
                  activeToRestore.push(payload as Cell);
              } else {
                  const empty = initialCells.shift(); // shift to fill top-left first
                  if (empty) {
-                     activeToRestore.push({ ...empty, ...payload, hash: payload.julesSessionId || payload.imageUrl, flash: 0.8 } as Cell);
+                     activeToRestore.push({ ...empty, ...payload, flash: 0.8 } as Cell);
                  }
              }
         }
