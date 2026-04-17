@@ -205,6 +205,20 @@ else
     echo -e "  [${YELLOW}WARN${NC}] lsusb command not found, skipping USB check."
 fi
 
+# Check CUPS & Printer availability
+if command -v lpstat &> /dev/null; then
+    echo -e "  [${GREEN}OK${NC}] CUPS Print Server (lpstat) is installed."
+    PRINTER_COUNT=$(lpstat -p 2>/dev/null | grep -c "printer")
+    if [ "$PRINTER_COUNT" -gt 0 ]; then
+        echo -e "  [${GREEN}OK${NC}] $PRINTER_COUNT printer(s) configured in CUPS."
+    else
+        echo -e "  [${YELLOW}WARN${NC}] CUPS is installed, but no printers are configured. Labels will not print physically!"
+    fi
+else
+    echo -e "  [${RED}FAIL${NC}] CUPS is NOT installed! (Run: sudo apt-get install cups cups-client)"
+    CRITICAL_ERROR=1
+fi
+
 # Check Pi Power Supply / Undervoltage (Silent Killer of Kiosks)
 if command -v vcgencmd &> /dev/null; then
     THROTTLE_HEX=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)

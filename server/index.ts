@@ -12,7 +12,22 @@ import { GoogleGenAI } from '@google/genai';
 
 const execPromise = util.promisify(exec);
 import { jules } from '@google/jules-sdk';
+import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
+import QRCode from 'qrcode';
+import thermal from './print';
 import 'dotenv/config';
+
+// Register the same fonts jules.ink uses so labels render correctly on Pi headless
+const fontsDir = path.join(process.cwd(), 'jules.ink', 'assets', 'fonts');
+try {
+    GlobalFonts.registerFromPath(path.join(fontsDir, 'Inter-Bold.ttf'), 'LabelSans');
+    GlobalFonts.registerFromPath(path.join(fontsDir, 'JetBrainsMono-Regular.ttf'), 'LabelMono');
+    console.log('✅ Registered thermal label fonts from jules.ink/assets');
+} catch (e) {
+    console.warn('⚠️ Could not register label fonts, falling back to system defaults:', e);
+}
+
+const printerHardware = thermal();
 
 const app = express();
 
@@ -194,6 +209,83 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
         // Optionally save the metadata/julesSessionId for the queue script
         const jsonPath = path.join(SPOOL_DIR, `${portraitId}.json`);
         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: false }, null, 2));
+
+        // Generate the 4x6 Label Composite
+        try {
+            console.log(`🖼️  Generating physical thermal label layout...`);
+            const labelWidth = 1200;
+            const labelHeight = 1800; // 4x6 ratio
+            const canvas = createCanvas(labelWidth, labelHeight);
+            const ctx = canvas.getContext('2d');
+
+            // Fill white background (thermal paper is white)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, labelWidth, labelHeight);
+
+            // Draw large portrait with cover-crop (handles non-square source images)
+            const portraitImg = await loadImage(buffer);
+            const srcW = portraitImg.width;
+            const srcH = portraitImg.height;
+            const cropSize = Math.min(srcW, srcH);
+            const sx = (srcW - cropSize) / 2;
+            const sy = (srcH - cropSize) / 2;
+            ctx.drawImage(portraitImg, sx, sy, cropSize, cropSize, 0, 0, labelWidth, labelWidth);
+
+            // Generate QR Code (Bottom Left)
+            const mosaicUrl = `https://nanobanana-mosaic.web.app/?portrait=${portraitId}`;
+            const qrBuffer = await QRCode.toBuffer(mosaicUrl, {
+                margin: 1,
+                scale: 10,
+                errorCorrectionLevel: 'M',
+                color: { dark: '#000000', light: '#FFFFFF' }
+            });
+            const qrImg = await loadImage(qrBuffer);
+
+            const qrSize = 500;
+            const qrX = 50;
+            // Center the QR code vertically in the remaining strip below the portrait
+            const qrY = labelWidth + ((labelHeight - labelWidth - qrSize) / 2);
+            ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+
+            // Add Branding (using registered fonts, with system fallback)
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 80px "LabelSans", "Inter", sans-serif';
+            ctx.fillText('NANO BANANA', qrX + qrSize + 50, qrY + 150);
+            ctx.font = 'bold 50px "LabelMono", "Courier New", monospace';
+            ctx.fillText('JULES AT NEXT', qrX + qrSize + 50, qrY + 250);
+            if (julesSessionId) {
+                ctx.fillText(`SESSION: ${julesSessionId.substring(0, 8)}`, qrX + qrSize + 50, qrY + 330);
+            }
+
+            const labelBuffer = canvas.toBuffer('image/png');
+            const labelPath = path.join(SPOOL_DIR, `${portraitId}-label.png`);
+            await fs.writeFile(labelPath, labelBuffer);
+            console.log(`✨ Label layout saved to ${labelPath}`);
+
+            // Non-blocking print: dispatch to CUPS *after* we respond to the frontend
+            setImmediate(async () => {
+                try {
+                    const printer = await printerHardware.find();
+                    if (printer) {
+                        console.log(`🖨️  Sending to CUPS printer ${printer.name}...`);
+                        await printerHardware.fix(printer.name);
+                        const jobId = await printerHardware.print(printer.name, labelPath, {
+                            fit: true,
+                            media: 'w288h432'
+                        });
+                        console.log(`✅ Print Job ID: ${jobId}`);
+                        await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
+                    } else {
+                        console.warn(`⚠️ No thermal printer found. Label saved to disk only.`);
+                    }
+                } catch (e) {
+                    console.error('❌ CUPS print dispatch failed:', e);
+                }
+            });
+
+        } catch (printErr) {
+            console.error('❌ Formatting/Printing Error:', printErr);
+        }
 
         res.status(200).json({ success: true, localPath: imagePath });
     } catch (error) {

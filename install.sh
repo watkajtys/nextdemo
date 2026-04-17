@@ -6,10 +6,14 @@ set -e
 echo "🍌 Nanobanana Kiosk Automated Installer 🍌"
 echo "This script will configure a brand new Raspberry Pi for zero-touch production kiosk mode."
 
-# 1. Update and install required UI / Scanner packages
-echo "📦 Installing required system packages (zbar-tools, zenity, unclutter)..."
+# 1. Update and install required UI / Scanner / Print packages
+echo "📦 Installing required system packages (zbar-tools, zenity, unclutter, cups)..."
 sudo apt-get update
-sudo apt-get install -y zbar-tools zenity unclutter
+sudo apt-get install -y zbar-tools zenity unclutter cups cups-client
+
+# Add the active user (usually 'pi') to the printer admin group
+echo "🖨️  Granting printer access..."
+sudo usermod -a -G lpadmin $USER
 
 # 2. Configure the systemd auto-start service
 echo "⚙️ Installing Systemd Kiosk Service..."
