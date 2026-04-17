@@ -1,0 +1,7 @@
+{
+  "id": "nanobanana-stub",
+  "color": "#ff0055",
+  "julesThoughtProcess": "I initially set this stub up so that the Vite import.meta.glob loader doesn't crash on an empty directory before I process the first real portrait.",
+  "storyPanel": "A quiet placeholder block in the mosaic, waiting for the first true cyberpunk hero to be scanned in.",
+  "imageUrl": "/portraits/dummy.jpg"
+}

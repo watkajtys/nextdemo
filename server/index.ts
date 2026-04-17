@@ -138,7 +138,7 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 2. Analyze the colors and composition.
 3. Decide where it fits best in our Quadtree mosaic.
 4. Create a new JSON file at src/data/portraits/${uniqueId}.json.`,
-                    source: { github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic', baseBranch: 'main' },
+                    source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
                     autoPr: true,
                 });
                 julesSessionId = session.id;
@@ -289,7 +289,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         Note: The mosaic block will initially render as a solid square using this hex color, and the image itself will only be revealed when the user interacts with the block.
                     `,
                     source: {
-                        github: process.env.GITHUB_REPO || 'your-org/nanobanana-mosaic',
+                        github: process.env.GITHUB_REPO || 'watkajtys/nextdemo',
                         baseBranch: 'main'
                     },
                     requireApproval: false,
