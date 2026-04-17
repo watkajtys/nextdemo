@@ -270,7 +270,8 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
                         console.log(`🖨️  Sending to CUPS printer ${printer.name}...`);
                         await printerHardware.fix(printer.name);
                         const jobId = await printerHardware.print(printer.name, labelBuffer, {
-                            fit: true
+                            fit: true,
+                            media: 'w288h432'
                         });
                         console.log(`✅ Print Job ID: ${jobId}`);
                         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
