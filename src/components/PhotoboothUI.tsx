@@ -57,21 +57,36 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     }, [processing]);
 
     // Initialize the hardware camera instantly on mount so there's no delay when they press the button
-    useEffect(() => {
-        navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                advanced: [{ focusMode: "continuous" } as any]
-            }
-        })
-            .then(stream => {
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    setStreamActive(true);
+    const startCamera = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    advanced: [{ focusMode: "continuous" } as any]
                 }
-            })
-            .catch(err => console.error("WebRTC Arducam Error:", err));
+            });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                setStreamActive(true);
+            }
+        } catch (err) {
+            console.error("WebRTC Arducam Error:", err);
+        }
+    };
+
+    const stopCamera = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+            setStreamActive(false);
+        }
+    };
+
+    useEffect(() => {
+        startCamera();
+        return () => stopCamera();
     }, []);
 
     // Calculate Max Depth for UI display
@@ -116,99 +131,73 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const triggerCaptureSequence = async () => {
         setFlash(true);
 
-        let blobToUpload: Blob | null = null;
+        // Stop the camera to release /dev/video0 for the backend ffmpeg process
+        stopCamera();
 
-        // Draw the exact video frame to the hidden canvas the millisecond the flash happens
-        if (videoRef.current && canvasRef.current && streamActive) {
-            const context = canvasRef.current.getContext('2d');
-            if (context) {
-                const videoW = videoRef.current.videoWidth || 1920;
-                const videoH = videoRef.current.videoHeight || 1080;
+        const tempHash = Math.random().toString(16).substring(2, 9);
+        // Better dynamic detection of the local backend port 3001
+        const apiBaseUrl = window.location.origin.replace(':3000', '') + ':3001';
+        console.log('📡 Using API Base URL:', apiBaseUrl);
 
-                // Calculate square crop from the center of the video feed
-                const size = Math.min(videoW, videoH);
-                const sx = (videoW - size) / 2;
-                const sy = (videoH - size) / 2;
-
-                // Set the exact square dimensions on the canvas
-                canvasRef.current.width = size;
-                canvasRef.current.height = size;
-
-                // "Snap" the photo using the precise source crop
-                context.drawImage(videoRef.current, sx, sy, size, size, 0, 0, size, size);
-
-                // Convert that square canvas frame into a raw JPEG Blob
-                blobToUpload = await new Promise<Blob | null>(resolve =>
-                    canvasRef.current!.toBlob(b => resolve(b), 'image/jpeg', 0.95)
-                );
-            }
-        }
-
-        // Wait for flash cascade
-        setTimeout(() => {
+        // Wait for flash peak
+        setTimeout(async () => {
             setFlash(false);
             setProcessing(true);
 
-            const tempHash = Math.random().toString(16).substring(2, 9);
+            try {
+                // Step 1: Trigger hardware capture on the Pi backend
+                console.log('📸 Triggering hardware capture...');
+                const captureRes = await fetch(`${apiBaseUrl}/api/capture`, { method: 'POST' });
+                const { jobId } = await captureRes.json();
 
-            // Upload the Blob to the Cloud Server for Nano Banana 2 stylization
-            if (blobToUpload) {
-                const formData = new FormData();
-                formData.append('image', blobToUpload, 'capture.jpg');
+                // Step 2: Poll for completion
+                let attempts = 0;
+                const poll = async () => {
+                    if (attempts > 30) throw new Error('Capture timeout');
+                    attempts++;
 
-                const cloudServerUrl = import.meta.env.VITE_API_URL || 'http://204.168.131.95:3001';
+                    const jobRes = await fetch(`${apiBaseUrl}/api/job/${jobId}`);
+                    const job = await jobRes.json();
 
-                fetch(`${cloudServerUrl}/api/process`, {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(res => res.json())
-                    .then(async (data) => {
-                        let finalCloudUrl: string | undefined;
-                        if (data?.printData?.imageUrl) {
-                            finalCloudUrl = `${cloudServerUrl}${data.printData.imageUrl}`;
+                    if (job.status === 'completed') {
+                        const { publicUrl, portraitId, julesSessionId } = job.result;
+                        const finalImageUrl = `${apiBaseUrl}${publicUrl}`;
+                        
+                        try {
+                            const img = await preloadImage(finalImageUrl);
+                            useMosaicStore.setState((state) => ({
+                                imageCache: { ...state.imageCache, [tempHash]: img }
+                            }));
+                            
+                            // Also save locally for print (though /api/capture might already handle this, 
+                            // we do it here for consistency if needed)
+                            fetch(`${apiBaseUrl}/api/save-for-print`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ imageUrl: finalImageUrl, portraitId, julesSessionId })
+                            }).catch(console.error);
+
+                        } catch (e) {
+                            console.error('Failed to preload image:', e);
                         }
 
-                        // Pre-load the image into the browser and inject into Zustand cache
-                        // BEFORE dismissing the generating screen. This guarantees the canvas
-                        // renderer finds the cached image on the very first animation frame.
-                        if (finalCloudUrl) {
-                            try {
-                                const img = await preloadImage(finalCloudUrl);
-                                // Inject directly into the Zustand image cache
-                                useMosaicStore.setState((state) => ({
-                                    imageCache: { ...state.imageCache, [tempHash]: img }
-                                }));
-                                
-                                // Fire-and-forget saving to the local Pi for thermal printing queue!
-                                const localServerUrl = window.location.origin.replace(':3000', ':3001');
-                                fetch(`${localServerUrl}/api/save-for-print`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        imageUrl: finalCloudUrl,
-                                        portraitId: data?.printData?.portraitId,
-                                        julesSessionId: data?.printData?.julesSessionId
-                                    })
-                                }).catch(e => console.error('Failed to notify local pi printer daemon:', e));
-
-                            } catch (e) {
-                                console.error('Failed to preload stylized image:', e);
-                            }
-                        }
-
-                        // NOW release the wait screen and trigger the grid animation
                         setProcessing(false);
-                        finishCaptureAndAnimate(tempHash, finalCloudUrl, data?.printData?.julesSessionId);
-                    })
-                    .catch((err) => {
-                        console.error(err);
-                        setProcessing(false);
-                        // Fallback: use the raw camera frame
-                        finishCaptureAndAnimate(tempHash, URL.createObjectURL(blobToUpload!));
-                    });
-            } else {
+                        finishCaptureAndAnimate(tempHash, finalImageUrl, julesSessionId);
+                        startCamera(); // Restart preview for next user
+                    } else if (job.status === 'failed') {
+                        throw new Error(job.error || 'Job failed');
+                    } else {
+                        setTimeout(poll, 1000);
+                    }
+                };
+
+                poll();
+            } catch (err) {
+                console.error('Capture failed:', err);
                 setProcessing(false);
+                startCamera();
+                // Fallback: trigger empty animation if hardware fails completely
+                finishCaptureAndAnimate(tempHash);
             }
         }, 400);
     };

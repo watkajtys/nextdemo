@@ -9,6 +9,7 @@ export const NEON_COLORS = [
 ];
 
 export interface Cell {
+    id?: string;
     x: number;
     y: number;
     w: number;
