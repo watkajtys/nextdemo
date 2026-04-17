@@ -1,0 +1,12 @@
+{
+  "id": "nanobanana-portrait-1776401874797",
+  "color": "#00FFFF",
+  "julesThoughtProcess": "Cyan (#00FFFF) represents high-tech energy and fits the cyberpunk theme perfectly. I chose the coordinates x: 1000, y: 1000 to position this block right in the center of our Quadtree mosaic, serving as an eye-catching focal point.",
+  "storyPanel": "Subject #1776401874797: A rogue data runner known as 'The Glitch'. Captured mid-sprint through the neon-drenched alleys of Sector 4. Their cyan signature always preceeds a system crash.",
+  "imageUrl": "/portraits/portrait-1776401874797.png",
+  "x": 1000,
+  "y": 1000,
+  "w": 100,
+  "h": 100,
+  "depth": 0
+}
