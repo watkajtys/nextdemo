@@ -179,6 +179,19 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                                 useMosaicStore.setState((state) => ({
                                     imageCache: { ...state.imageCache, [tempHash]: img }
                                 }));
+                                
+                                // Fire-and-forget saving to the local Pi for thermal printing queue!
+                                const localServerUrl = window.location.origin.replace(':3000', ':3001');
+                                fetch(`${localServerUrl}/api/save-for-print`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        imageUrl: finalCloudUrl,
+                                        portraitId: data?.printData?.portraitId,
+                                        julesSessionId: data?.printData?.julesSessionId
+                                    })
+                                }).catch(e => console.error('Failed to notify local pi printer daemon:', e));
+
                             } catch (e) {
                                 console.error('Failed to preload stylized image:', e);
                             }

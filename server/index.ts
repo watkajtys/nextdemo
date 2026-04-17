@@ -159,6 +159,42 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 });
 
 /**
+ * Endpoint: /api/save-for-print
+ * Triggered by the Photobooth UI to explicitly save a cloud image to the Pi's hardware disk for thermal printing.
+ */
+app.post('/api/save-for-print', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { imageUrl, portraitId, julesSessionId } = req.body;
+        if (!imageUrl || !portraitId) {
+            res.status(400).json({ error: 'Missing imageUrl or portraitId' });
+            return;
+        }
+
+        console.log(`🖨️  Receiving print asset from cloud: ${portraitId}`);
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error(`Failed to fetch cloud image: ${response.statusText}`);
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        const fileExtension = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
+        const imagePath = path.join(UPLOADS_DIR, `${portraitId}.${fileExtension}`);
+        
+        await fs.writeFile(imagePath, buffer);
+        console.log(`💾 Saved to Pi disk perfectly for printing: ${imagePath}`);
+        
+        // Optionally save the metadata/julesSessionId for the queue script
+        const jsonPath = path.join(UPLOADS_DIR, `${portraitId}.json`);
+        await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: false }, null, 2));
+
+        res.status(200).json({ success: true, localPath: imagePath });
+    } catch (error) {
+        console.error('❌ Failed to save for print:', error);
+        res.status(500).json({ error: 'Could not save print asset.' });
+    }
+});
+
+/**
  * Endpoint: /api/process
  * Receives the raw 1080p photo from the Pi, stylizes it, and dispatches to Jules.
  */
