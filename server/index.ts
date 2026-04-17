@@ -182,7 +182,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         responseModalities: ['TEXT', 'IMAGE'],
                     },
                     contents: [
-                        { text: "CRITICAL INSTRUCTION: You are optimizing an image for a low-resolution thermal receipt printer. Completely REDRAW the subject from scratch as a highly simplified 1990s cyberpunk anime character. You MUST use extreme 1-bit high contrast. ABSOLUTELY NO SHADING OF ANY KIND. NO GRAY. NO STIPPLING. NO CROSS-HATCHING. NO FINE DETAILS. Use ONLY thick, solid black outlines and massive, flat shapes of pure black ink against a pure white background. The geometry must be sharp and exaggerated, but the rendering must be as simple and bold as a stencil or linocut. Abandon all photographic realism." },
+                        { text: "CRITICAL INSTRUCTION: You are optimizing an image for a low-resolution thermal receipt printer. Completely REDRAW the subject from scratch as a highly simplified 1990s cyberpunk anime character. You MUST use extreme 1-bit high contrast. ABSOLUTELY NO SHADING OF ANY KIND. NO GRAY. NO STIPPLING. NO CROSS-HATCHING. NO FINE DETAILS. Use ONLY thick, solid black outlines and massive, flat shapes of pure black ink against a pure white background. The geometry must be sharp and exaggerated, but the rendering must be as simple and bold as a stencil or linocut. Abandon all photographic realism. ABSOLUTELY NO TEXT. NO WATERMARKS. NO SIGNATURES." },
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } }
                     ]
                 });
