@@ -269,7 +269,7 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
                     if (printer) {
                         console.log(`🖨️  Sending to CUPS printer ${printer.name}...`);
                         await printerHardware.fix(printer.name);
-                        const jobId = await printerHardware.print(printer.name, labelPath, {
+                        const jobId = await printerHardware.print(printer.name, labelBuffer, {
                             fit: true
                         });
                         console.log(`✅ Print Job ID: ${jobId}`);
