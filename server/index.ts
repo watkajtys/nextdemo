@@ -31,6 +31,7 @@ app.use(express.json({
 // Constants & Config
 const PORT = process.env.PORT || 3001;
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'portraits');
+const SPOOL_DIR = path.join(process.cwd(), 'public', 'spool');
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit to prevent memory DoS
 
 // Rate Limiting (Protects APIs & Cloud Bill from spam-clicks)
@@ -58,6 +59,13 @@ async function initStorage() {
     } catch {
         await fs.mkdir(UPLOADS_DIR, { recursive: true });
         console.log(`📁 Created storage directory at ${UPLOADS_DIR}`);
+    }
+    
+    try {
+        await fs.access(SPOOL_DIR);
+    } catch {
+        await fs.mkdir(SPOOL_DIR, { recursive: true });
+        console.log(`🖨️  Created print spool directory at ${SPOOL_DIR}`);
     }
 }
 initStorage();
@@ -178,13 +186,13 @@ app.post('/api/save-for-print', async (req: Request, res: Response): Promise<voi
         const buffer = Buffer.from(arrayBuffer);
         
         const fileExtension = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
-        const imagePath = path.join(UPLOADS_DIR, `${portraitId}.${fileExtension}`);
+        const imagePath = path.join(SPOOL_DIR, `${portraitId}.${fileExtension}`);
         
         await fs.writeFile(imagePath, buffer);
-        console.log(`💾 Saved to Pi disk perfectly for printing: ${imagePath}`);
+        console.log(`💾 Saved to Pi spool perfectly for printing: ${imagePath}`);
         
         // Optionally save the metadata/julesSessionId for the queue script
-        const jsonPath = path.join(UPLOADS_DIR, `${portraitId}.json`);
+        const jsonPath = path.join(SPOOL_DIR, `${portraitId}.json`);
         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: false }, null, 2));
 
         res.status(200).json({ success: true, localPath: imagePath });

@@ -21,7 +21,7 @@ if ip link show eth0 2>/dev/null | grep -q "state UP"; then
     ETH_IP=$(ip -4 addr show eth0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1)
     echo -e "  [${GREEN}OK${NC}] Ethernet (eth0) is UP - IP: ${ETH_IP:-None}"
 else
-    echo -e "  [${BLUE}INFO${NC}] Ethernet (eth0) is not connected"
+    echo -e "  [${BLUE}INFO${NC}] Ethernet (eth0) is disconnected. (Plug in an ethernet cable to auto-connect)"
 fi
 
 # Check WiFi
@@ -29,15 +29,127 @@ if ip link show wlan0 2>/dev/null | grep -q "state UP"; then
     WIFI_IP=$(ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1)
     echo -e "  [${GREEN}OK${NC}] WiFi (wlan0) is UP - IP: ${WIFI_IP:-None}"
 else
-    echo -e "  [${BLUE}INFO${NC}] WiFi (wlan0) is not connected"
+    echo -e "  [${BLUE}INFO${NC}] WiFi (wlan0) is not connected."
 fi
 
-# Check Internet Access
-if ping -c 1 -W 2 8.8.8.8 &> /dev/null; then
-    echo -e "  [${GREEN}OK${NC}] Internet connection verified (Ping 8.8.8.8 successful)"
+# Check Internet Access (Industry Standard Captive Portal Check)
+# Conferences often block ICMP (ping) or intercept traffic with hotel-style Captive Portals.
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
+if [ "$STATUS" == "204" ]; then
+    echo -e "  [${GREEN}OK${NC}] Internet connection verified (204 No Content / No Captive Portal)"
 else
-    echo -e "  [${RED}FAIL${NC}] No internet connection detected! Need Ethernet OR WiFi."
-    CRITICAL_ERROR=1
+    echo -e "  [${RED}FAIL${NC}] No internet connection detected!"
+    echo -e "\n  ${YELLOW}📷 ZERO-TOUCH WIFI SETUP 📷${NC}"
+    echo -e "  ${BLUE}Please show a Wi-Fi QR Code from your phone to the camera... (Timeout in 30s)${NC}"
+    
+    if command -v zbarcam &> /dev/null; then
+        # UX BEST PRACTICE: Export DISPLAY so zbarcam shows a live camera viewfinder feed.
+        # This allows the staff to actually see what the lens sees and frame their phone perfectly.
+        export DISPLAY=:0
+        qr_output=$(timeout 30s zbarcam --raw /dev/video0 2>/dev/null | head -n 1)
+        
+        if [ -n "$qr_output" ] && [[ "$qr_output" == WIFI:* ]]; then
+            echo -e "  [${GREEN}OK${NC}] Scanned Wi-Fi QR Code successfully!"
+            
+            # Parse standard WIFI QR format (WIFI:T:WPA;S:NetworkName;P:Password;;)
+            ssid=$(echo "$qr_output" | sed -n 's/.*S:\([^;]*\).*/\1/p')
+            pass=$(echo "$qr_output" | sed -n 's/.*P:\([^;]*\).*/\1/p')
+            
+            if [ -n "$ssid" ]; then
+                echo -e "  ${BLUE}Connecting to network: $ssid...${NC}"
+                
+                if command -v nmcli &> /dev/null; then
+                    if [ -n "$pass" ]; then
+                        sudo nmcli dev wifi connect "$ssid" password "$pass" &>/dev/null
+                    else
+                         sudo nmcli dev wifi connect "$ssid" &>/dev/null
+                    fi
+                else
+                    echo -e "  ${RED}nmcli not found. Cannot configure network automatically.${NC}"
+                fi
+                
+                # Verify connection has successfully routed
+                echo -e "  ${BLUE}Verifying connection...${NC}"
+                sleep 5
+                VERIFY=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
+                if [ "$VERIFY" == "204" ]; then
+                     echo -e "  [${GREEN}OK${NC}] Internet connected successfully!"
+                else
+                     CRITICAL_ERROR=1
+                     echo -e "  [${RED}FAIL${NC}] Connected to Wi-Fi, but no internet access (Status: $VERIFY). May require a browser login."
+                fi
+            else
+                CRITICAL_ERROR=1
+                echo -e "  [${RED}FAIL${NC}] Could not extract SSID from the QR code! (String: $qr_output)"
+            fi
+        else
+            echo -e "  [${RED}FAIL${NC}] Camera scan timed out or an invalid QR code was presented."
+            # Fallback to Graphical Touch UI
+            export DISPLAY=:0
+            if command -v zenity &> /dev/null; then
+                echo -e "  ${YELLOW}Launching Touch-Screen Wi-Fi Selection...${NC}"
+                networks=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
+                
+                selected_ssid=$(echo "$networks" | zenity --list --title="Wi-Fi Setup" --text="Touch a network to connect:" --column="Available Networks" --width=600 --height=400 2>/dev/null)
+                
+                if [ -n "$selected_ssid" ]; then
+                    password=$(zenity --password --title="Wi-Fi Password" --text="Enter the password for $selected_ssid:" 2>/dev/null)
+                    echo -e "  ${BLUE}Connecting to $selected_ssid...${NC}"
+                    if [ -n "$password" ]; then
+                        sudo nmcli dev wifi connect "$selected_ssid" password "$password" &>/dev/null
+                    else
+                        sudo nmcli dev wifi connect "$selected_ssid" &>/dev/null
+                    fi
+                    
+                    sleep 5
+                    VERIFY3=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
+                    if [ "$VERIFY3" == "204" ]; then
+                        echo -e "  [${GREEN}OK${NC}] Internet connected via Touch GUI!"
+                        # Reset critical error since we saved the boot!
+                        CRITICAL_ERROR=0
+                    else
+                        CRITICAL_ERROR=1
+                        echo -e "  [${RED}FAIL${NC}] Failed to access true internet via Touch GUI (Status: $VERIFY3)."
+                    fi
+                else
+                    CRITICAL_ERROR=1
+                    echo -e "  [${RED}FAIL${NC}] Wi-Fi selection cancelled by user."
+                fi
+            else
+                CRITICAL_ERROR=1
+                echo -e "  [${YELLOW}WARN${NC}] 'zenity' package not installed. Touch GUI fallback unavailable."
+            fi
+        fi
+    else
+        echo -e "  [${YELLOW}WARN${NC}] 'zbar-tools' is not installed. Skipping camera scanner."
+        # Jump straight to Graphical fallback if no camera tools!
+        export DISPLAY=:0
+        if command -v zenity &> /dev/null; then
+            echo -e "  ${YELLOW}Launching Touch-Screen Wi-Fi Selection...${NC}"
+            networks=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
+            selected_ssid=$(echo "$networks" | zenity --list --title="Wi-Fi Setup" --text="Touch a network to connect:" --column="Available Networks" --width=600 --height=400 2>/dev/null)
+            if [ -n "$selected_ssid" ]; then
+                password=$(zenity --password --title="Wi-Fi Password" --text="Enter the password for $selected_ssid:" 2>/dev/null)
+                if [ -n "$password" ]; then
+                    sudo nmcli dev wifi connect "$selected_ssid" password "$password" &>/dev/null
+                else
+                    sudo nmcli dev wifi connect "$selected_ssid" &>/dev/null
+                fi
+                sleep 5
+                VERIFY2=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
+                if [ "$VERIFY2" == "204" ]; then
+                    echo -e "  [${GREEN}OK${NC}] Internet connected via Touch GUI!"
+                else
+                    CRITICAL_ERROR=1
+                fi
+            else
+                CRITICAL_ERROR=1
+            fi
+        else
+            CRITICAL_ERROR=1
+            echo -e "  [${RED}FAIL${NC}] Both QR Scanner and Touch GUI are unavailable."
+        fi
+    fi
 fi
 
 echo -e "\n${YELLOW}2. Storage & Memory checks...${NC}"
@@ -91,6 +203,22 @@ if command -v lsusb &> /dev/null; then
     fi
 else
     echo -e "  [${YELLOW}WARN${NC}] lsusb command not found, skipping USB check."
+fi
+
+# Check Pi Power Supply / Undervoltage (Silent Killer of Kiosks)
+if command -v vcgencmd &> /dev/null; then
+    THROTTLE_HEX=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)
+    # 0x0 is completely healthy. 
+    # 0x50000 means it occurred in the past (warn). 
+    # Anything ending in 1 (e.g. 0x50005) means it is currently undervolting and throttling CPU!
+    if [ "$THROTTLE_HEX" == "0x0" ]; then
+        echo -e "  [${GREEN}OK${NC}] Power Supply is healthy (No Undervoltage/Throttling detected)"
+    elif [[ "$THROTTLE_HEX" == *1 || "$THROTTLE_HEX" == *5 || "$THROTTLE_HEX" == *9 || "$THROTTLE_HEX" == *d ]]; then
+         echo -e "  [${RED}FAIL${NC}] ⚡ ACTIVE UNDERVOLTAGE! The Pi is currently throttling CPU speed. Replace your power supply!"
+         CRITICAL_ERROR=1
+    else
+         echo -e "  [${YELLOW}WARN${NC}] Historical undervoltage detected since boot. Your power supply may be inadequate during peak load."
+    fi
 fi
 
 echo -e "\n${YELLOW}4. Software Prerequisites...${NC}"

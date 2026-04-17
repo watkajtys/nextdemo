@@ -21,7 +21,17 @@ pkill -f "node" || true
 pkill -f "unclutter" || true
 
 # Bulletproof: Define trap EARLY so if the script fails during startup, we still clean up!
-trap 'echo "🛑 Shutting down Photobooth..."; kill $SERVER_PID $VITE_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null || true; exit' SIGINT SIGTERM EXIT
+# Best Practice: Use a dedicated cleanup function with set +e inside it.
+# If set -e is active inside the trap and a 'kill' fails (process already dead),
+# the trap itself would abort, leaving zombie processes behind.
+cleanup() {
+    set +e
+    echo "🛑 Shutting down Photobooth..."
+    kill $SERVER_PID $VITE_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null
+    wait $SERVER_PID $VITE_PID $CHROMIUM_PID 2>/dev/null
+    echo "👋 Photobooth stopped."
+}
+trap cleanup SIGINT SIGTERM EXIT
 
 
 # Best Practice: Robust path resolution (handles symlinks gracefully)
@@ -35,28 +45,49 @@ else
     echo "⚠️ pi-doctor.sh not found. Skipping doctor checks."
 fi
 
-echo "⬇️ Fetching latest updates from GitHub..."
-# We use || true so that if the Pi is offline/has no WiFi, 
-# 'git pull' failing won't crash the script due to 'set -e'.
-# It will just gracefully skip and run the local code!
-git pull || true
+# --- SMART UPDATE ARCHITECTURE ---
+# 1. Fetch metadata gently without touching local files
+echo "⬇️ Checking GitHub for new updates..."
+# Timeout prevents hanging if internet verification passed but github is unreachable
+timeout 10s git fetch origin main || true
 
-echo "📦 Checking dependencies..."
-# Best Practice: 'npm ci' is preferred over 'npm install' for production/demos.
-# It strictly uses the lockfile, is usually faster, and guarantees exact versions.
-# We also skip audits to speed up booting.
-if [ -f "package-lock.json" ]; then
-    if ! npm ci --prefer-offline --no-audit; then
-        echo "⚠️ npm ci failed! Attempting AUTO-FIX by clearing node_modules..."
-        rm -rf node_modules
-        npm ci --no-audit
+# Get local and remote commit hashes
+LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "local_empty")
+REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "remote_empty")
+
+if [ "$LOCAL" != "$REMOTE" ] && [ "$REMOTE" != "remote_empty" ]; then
+    echo "✨ New code discovered! Preparing to update..."
+    
+    # Check if package-lock.json or package.json is about to be overwritten
+    NEEDS_NPM=0
+    if git diff --name-only HEAD origin/main | grep -qE "package-lock\.json|package\.json"; then
+        NEEDS_NPM=1
+        echo "📦 Dependency changes detected in the new commit."
+    fi
+
+    # Safely pull the new code
+    git pull origin main || true
+    
+    if [ "$NEEDS_NPM" -eq 1 ]; then
+        echo "📦 Re-installing dependencies..."
+        if [ -f "package-lock.json" ]; then
+            if ! npm ci --prefer-offline --no-audit; then
+                echo "⚠️ npm ci failed! Attempting AUTO-FIX by clearing node_modules..."
+                rm -rf node_modules
+                npm ci --no-audit
+            fi
+        else
+            if ! npm install --no-audit; then
+                echo "⚠️ npm install failed! Attempting AUTO-FIX by clearing node_modules..."
+                rm -rf node_modules
+                npm install --no-audit
+            fi
+        fi
+    else
+         echo "⏩ No dependency changes detected. Skipping npm update for a fast boot!"
     fi
 else
-    if ! npm install --no-audit; then
-        echo "⚠️ npm install failed! Attempting AUTO-FIX by clearing node_modules..."
-        rm -rf node_modules
-        npm install --no-audit
-    fi
+    echo "⏩ Code is completely up to date. Fast Boot Enabled."
 fi
 
 echo "🔑 Checking for configuration..."
@@ -119,7 +150,12 @@ echo "🖥️ Launching Kiosk UI..."
 # --use-fake-ui-for-media-stream: Automatically accepts the "Allow Camera Permissions" popup for our HTML5 logic
 # --disable-dev-shm-usage: CRITICAL FOR PI. Prevents Chromium from overflowing the tiny /dev/shm shared memory cache and crashing.
 # --js-flags="--max-old-space-size=512": Caps the Javascript V8 engine RAM usage to 512MB to prevent long-term memory leaks.
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --js-flags=\"--max-old-space-size=512\""
+# --no-first-run: Suppresses the "Welcome to Chromium!" first-run wizard.
+# --disable-features=Translate,TranslateUI: Prevents a translate bar from appearing over the UI.
+# --disable-background-networking: Stops Chromium from phoning home for telemetry/safebrowsing over conference wifi.
+# --disable-sync: Disables all sync features since there is no user profile.
+# --disk-cache-dir=/dev/null: Sends the disk cache to the void, preventing SSD writes and cache bloat.
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --disk-cache-dir=/dev/null --js-flags=\"--max-old-space-size=512\""
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.

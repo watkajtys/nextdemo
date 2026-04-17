@@ -1,0 +1,31 @@
+[Unit]
+Description=Nanobanana Photobooth Kiosk
+# Start after the graphical session, network, and time sync are ready
+After=graphical.target network-online.target time-sync.target
+Wants=network-online.target
+
+# Disable restart rate limiting so systemd NEVER gives up restarting
+# the booth, even if it crashes 100 times in a row at a conference.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=pi
+Environment=DISPLAY=:0
+WorkingDirectory=/home/pi/nextdemo
+
+ExecStart=/home/pi/nextdemo/start-booth.sh
+
+# Always restart if the script exits for any reason
+Restart=always
+# Wait 5 seconds between restarts to prevent CPU thrashing
+RestartSec=5
+
+# Force a clean restart every 24 hours to reclaim leaked memory
+RuntimeMaxSec=86400
+
+# Give Chromium time to shut down gracefully
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical.target

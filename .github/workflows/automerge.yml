@@ -1,0 +1,21 @@
+name: Zero-Touch Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    # Automatically merges PRs if they are NOT made by the human owner
+    if: github.actor != 'watkajtys'
+    steps:
+      - name: Squash and Merge AI PR
+        run: gh pr merge --squash --admin "$PR_URL"
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
