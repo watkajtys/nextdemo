@@ -153,12 +153,18 @@ app.post('/api/process-local', processLimiter, async (req: Request, res: Respons
 
         console.log(`☁️ Image saved to local/cloud storage: ${publicImageUrl}`);
 
+        const host = req.get('host');
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const absoluteImageUrl = `${protocol}://${host}${publicImageUrl}`;
+
         let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
             try {
                 const session = await jules.session({
-                    prompt: `1. A new portrait was taken: ${publicImageUrl}
+                    prompt: `1. A new portrait was taken! The image is publicly hosted at:
+![portrait](${absoluteImageUrl})
+
 2. Analyze the colors and composition.
 3. Decide where it fits best in our Quadtree mosaic.
 4. Create a new JSON file at src/data/portraits/${uniqueId}.json.`,
@@ -364,23 +370,24 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
 
         console.log(`☁️ Image saved to local/cloud storage: ${publicImageUrl}`);
 
+        const host = req.get('host');
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const absoluteImageUrl = `${protocol}://${host}${publicImageUrl}`;
+
         // 3. DISPATCH TO JULES (Fire and Forget)
         let julesSessionId: string | undefined;
         if (process.env.JULES_API_KEY) {
             console.log(`🤖 Dispatching task to Jules Agent...`);
 
-            const base64Image = stylizedImageBuffer.toString('base64');
-            const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
-
             try {
                 const session = await jules.session({
                     prompt: `
-                        1. We have captured a new 1-bit high-contrast portrait. Here is the image data:
+                        1. We have captured a new 1-bit high-contrast portrait. The image is publicly hosted at:
                         
-                        ![portrait](data:${mimeType};base64,${base64Image})
+                        ![portrait](${absoluteImageUrl})
                         
                         2. Choose a vibrant, random cyberpunk color (e.g., neon pink, cyan, electric yellow). Generate its Hex code.
-                        3. Write a script to process the attached base64 image: replace all the solid WHITE pixels with your chosen cyberpunk color, leaving the BLACK pixels intact as black.
+                        3. Write a script to download the image from the URL provided above and process it: replace all the solid WHITE pixels with your chosen cyberpunk color, leaving the BLACK pixels intact as black.
                         4. Save the resulting dyed image permanently to public/portraits/${imageFileName} in the repository.
                         5. Decide where the block fits best in our Quadtree mosaic.
                         6. Create a new JSON file at src/data/portraits/${uniqueId}.json. The JSON should include:
