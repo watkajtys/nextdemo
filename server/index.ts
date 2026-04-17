@@ -182,7 +182,7 @@ app.post('/api/process', processLimiter, upload.single('image'), async (req: Req
                         responseModalities: ['TEXT', 'IMAGE'],
                     },
                     contents: [
-                        { text: "CRITICAL INSTRUCTION: You are a professional manga artist. DO NOT just apply a black and white filter to this image. You must completely REDRAW the subject from scratch using high-contrast 1990s cyberpunk manga stylization. Fundamentally alter the geometry of the image: give the subject sharp, exaggerated anime facial features, blocky cybernetic elements, and thick, messy ink outlines. Draw it in pure black and white ink only. The final output must look like a scanned, hand-drawn page from a Japanese comic book, abandoning all photographic realism." },
+                        { text: "CRITICAL INSTRUCTION: You are optimizing an image for a low-resolution thermal receipt printer. Completely REDRAW the subject from scratch as a highly simplified 1990s cyberpunk anime character. You MUST use extreme 1-bit high contrast. ABSOLUTELY NO SHADING OF ANY KIND. NO GRAY. NO STIPPLING. NO CROSS-HATCHING. NO FINE DETAILS. Use ONLY thick, solid black outlines and massive, flat shapes of pure black ink against a pure white background. The geometry must be sharp and exaggerated, but the rendering must be as simple and bold as a stencil or linocut. Abandon all photographic realism." },
                         { inlineData: { mimeType: req.file.mimetype || 'image/jpeg', data: req.file.buffer.toString('base64') } }
                     ]
                 });
