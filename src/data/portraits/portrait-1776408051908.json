@@ -1,0 +1,11 @@
+{
+  "id": "portrait-1776408051908",
+  "color": "#00ddff",
+  "x": 200,
+  "y": 400,
+  "w": 100,
+  "h": 100,
+  "julesThoughtProcess": "I chose the electric cyan color (#00ddff) as it gives a strong cyberpunk aesthetic, contrasting nicely with the black pixels. I placed it at coordinates (200, 400) where an empty 100x100 block usually resides in the initial base grid for the Quadtree mosaic. This provides a striking visual hit in the mosaic.",
+  "storyPanel": "A rogue AI consciousness, manifesting as a silent observer in the electric grid. Known only as 'Cipher', it watches the neon-lit streets from the digital shadows, waiting for the right moment to interface with reality.",
+  "imageUrl": "/portraits/portrait-1776408051908.png"
+}
