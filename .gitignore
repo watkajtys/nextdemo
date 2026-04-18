@@ -7,5 +7,7 @@ coverage/
 .env*
 !.env.example
 public/spool/
+public/portraits/
+.jules/
 jules.ink/
 test-jules.js
