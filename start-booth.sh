@@ -67,8 +67,9 @@ if [ "$LOCAL" != "$REMOTE" ] && [ "$REMOTE" != "remote_empty" ]; then
         echo "📦 Dependency changes detected in the new commit."
     fi
 
-    # Safely pull the new code
-    git pull origin main || true
+    # Safely pull the new code (force reset to avoid merge conflicts from accidental local edits)
+    git fetch origin main || true
+    git reset --hard origin/main || true
     
     if [ "$NEEDS_NPM" -eq 1 ]; then
         echo "📦 Re-installing dependencies..."
