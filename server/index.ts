@@ -224,7 +224,9 @@ async function processSyncQueue() {
             
             console.log(`☁️ Background worker syncing ${file} to cloud orchestrator at ${cloudUrl}...`);
             const formData = new FormData();
-            const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
+            // Convert Node Buffer to an ArrayBuffer so native fetch/FormData polyfills serialize it correctly
+            const arrayBuffer = new Uint8Array(imageBuffer).buffer;
+            const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
             formData.append('image', blob, 'capture.jpg');
 
             const headers: Record<string, string> = {};
@@ -282,6 +284,8 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
     let stylizedBuffer = imageBuffer;
     let fileExt = 'jpg';
 
+    let finalImageToThreshold = imageBuffer;
+
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local edge Gemini stylization...');
@@ -303,27 +307,34 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
 
             const part = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
             if (part && (part as any).inlineData) {
-                const rawStylized = Buffer.from((part as any).inlineData.data, 'base64');
-                
-                // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
-                const img = await loadImage(rawStylized);
-                const canvas = createCanvas(img.width, img.height);
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                
-                for (let i = 0; i < data.length; i += 4) {
-                    const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
-                    const val = brightness > 128 ? 255 : 0;
-                    data[i] = data[i+1] = data[i+2] = val;
-                }
-                ctx.putImageData(imageData, 0, 0);
-                stylizedBuffer = canvas.toBuffer('image/png');
-                fileExt = 'png';
-                console.log('🎨 Gemini stylization + Thresholding successful');
+                finalImageToThreshold = Buffer.from((part as any).inlineData.data, 'base64');
+                console.log('🎨 Gemini stylization successful');
             }
         } catch (e) { console.error('🎨 Gemini failed:', (e as Error).message); }
+    }
+
+    try {
+        // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
+        // This runs on either the stylized Gemini output OR the raw camera fallback!
+        // This guarantees the thermal printer NEVER receives a grayscale or color JPEG, which crashes it.
+        const img = await loadImage(finalImageToThreshold);
+        const canvas = createCanvas(img.width, img.height);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+            const val = brightness > 128 ? 255 : 0;
+            data[i] = data[i+1] = data[i+2] = val;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        stylizedBuffer = canvas.toBuffer('image/png');
+        fileExt = 'png';
+        console.log('🖤 1-Bit Thresholding successful');
+    } catch (e) {
+        console.error('🖤 Thresholding failed:', (e as Error).message);
     }
 
     const imageFileName = `${portraitId}.${fileExt}`;
