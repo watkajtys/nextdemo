@@ -37,6 +37,16 @@ function updateJob(id: string, update: Partial<Job>) {
     console.log(`[Job ${id}] ${updated.status} ${update.error ? '- Error: ' + update.error : ''}`);
 }
 
+// Cleanup old jobs every 5 minutes to prevent memory leaks
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, job] of jobs.entries()) {
+        if (now - job.updatedAt > 5 * 60 * 1000) { // 5 minutes
+            jobs.delete(id);
+        }
+    }
+}, 5 * 60 * 1000);
+
 /**
  * CameraManager: Coordinates hardware access to /dev/video0.
  * Simplified: Preview is handled by the browser (WebRTC). 
@@ -412,9 +422,15 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         if (!imageUrl || !portraitId) return res.status(400).json({ error: 'Missing data' });
         
         portraitId = path.basename(portraitId);
-        let fetchUrl = imageUrl.startsWith('/') ? `http://localhost:${PORT}${imageUrl}` : imageUrl;
+        
+        // SSRF Protection: Only allow local relative paths
+        if (!imageUrl.startsWith('/')) {
+            return res.status(400).json({ error: 'Invalid imageUrl: Must be a relative path' });
+        }
+        let fetchUrl = `http://localhost:${PORT}${imageUrl}`;
 
         const response = await fetch(fetchUrl);
+        if (!response.ok) throw new Error(`Failed to fetch image: HTTP ${response.status}`);
         const buffer = Buffer.from(await response.arrayBuffer());
         const fileExtension = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
         const imagePath = path.join(SPOOL_DIR, `${portraitId}.${fileExtension}`);
@@ -460,4 +476,5 @@ s Error).message });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
  port ${PORT}`));
+{PORT}`));
 {PORT}`));
