@@ -276,7 +276,7 @@ async function triggerPrint(imageUrl: string, portraitId: string, julesSessionId
     }
 }
 
-async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
+async function processImage(imageBuffer: Buffer, existingPortraitId?: string, skipSync: boolean = false) {
     const portraitId = existingPortraitId || `portrait-${Date.now()}`;
     let stylizedBuffer = imageBuffer;
     let fileExt = 'jpg';
