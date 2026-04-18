@@ -216,10 +216,20 @@ async function processSyncQueue() {
     const cloudUrl = process.env.CLOUD_SERVER_URL || 'http://204.168.131.95:3001';
     try {
         const files = await fs.readdir(QUEUE_DIR);
+        const now = Date.now();
         for (const file of files) {
             if (!file.endsWith('.jpg') && !file.endsWith('.png')) continue;
             
             const filePath = path.join(QUEUE_DIR, file);
+            const stats = await fs.stat(filePath);
+            
+            // Clear out any old ghost files stuck in the queue from this morning!
+            if (now - stats.mtimeMs > 60 * 60 * 1000) {
+                console.log(`🧹 Deleting old stuck file from queue: ${file}`);
+                await fs.unlink(filePath).catch(() => {});
+                continue;
+            }
+
             const imageBuffer = await fs.readFile(filePath);
             
             console.log(`☁️ Background worker syncing ${file} to cloud orchestrator at ${cloudUrl}...`);
