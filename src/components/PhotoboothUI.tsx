@@ -41,7 +41,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     // We use a backend-driven MJPEG stream instead of WebRTC getUserMedia.
     // This bypasses HTTPS requirements and prevents hardware resource conflicts 
     // between the browser and the backend capture process.
-    const apiBaseUrl = window.location.origin.replace(':3000', '') + ':3001';
+    const apiBaseUrl = window.location.port === '3000' 
+        ? window.location.origin.replace(':3000', ':3001')
+        : window.location.origin;
     const [previewUrl, setPreviewUrl] = useState(`${apiBaseUrl}/api/preview`);
 
     // Cycle wait screen messages
@@ -118,7 +120,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
         const tempHash = Math.random().toString(16).substring(2, 9);
         // Better dynamic detection of the local backend port 3001
-        const apiBaseUrl = window.location.origin.replace(':3000', '') + ':3001';
+        const apiBaseUrl = window.location.port === '3000' 
+            ? window.location.origin.replace(':3000', ':3001')
+            : window.location.origin;
         console.log('📡 Using API Base URL:', apiBaseUrl);
 
         // Wait for flash peak
@@ -143,7 +147,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
                     if (job.status === 'completed') {
                         const { publicUrl, portraitId, julesSessionId } = job.result;
-                        const finalImageUrl = `${apiBaseUrl}${publicUrl}`;
+                        const finalImageUrl = publicUrl.startsWith('http') 
+                            ? publicUrl 
+                            : `${apiBaseUrl}${publicUrl}`;
                         
                         try {
                             const img = await preloadImage(finalImageUrl);
