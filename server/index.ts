@@ -331,8 +331,10 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
     const publicUrl = `/portraits/${imageFileName}`;
 
     // Queue raw image for background sync (so Cloud can process it independently for the mosaic)
-    const queuePath = path.join(QUEUE_DIR, `raw-${portraitId}.jpg`);
-    await fs.writeFile(queuePath, imageBuffer).catch(e => console.error('❌ Failed to queue image:', e));
+    if (!skipSync) {
+        const queuePath = path.join(QUEUE_DIR, `raw-${portraitId}.jpg`);
+        await fs.writeFile(queuePath, imageBuffer).catch(e => console.error('❌ Failed to queue image:', e));
+    }
 
     let julesSessionId: string | undefined;
     if (process.env.JULES_API_KEY) {
