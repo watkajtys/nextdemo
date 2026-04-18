@@ -472,12 +472,3 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
- port ${PORT}`));
-s Error).message }); 
-    }
-});
-
-app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
- port ${PORT}`));
-{PORT}`));
-{PORT}`));
