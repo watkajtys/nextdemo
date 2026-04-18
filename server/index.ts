@@ -175,10 +175,17 @@ try {
     GlobalFonts.registerFromPath(path.join(fontsDir, 'JetBrainsMono-Regular.ttf'), 'LabelMono');
 } catch (e) {}
 
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(cors());
 app.use('/portraits', express.static(path.join(process.cwd(), 'public', 'portraits')));
+app.use(express.static(path.join(process.cwd(), 'dist')));
 app.use(express.json());
+
+// SPA Catch-all: If a request doesn't match an API or static file, serve index.html
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+});
 
 const PORT = process.env.PORT || 3001;
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'portraits');

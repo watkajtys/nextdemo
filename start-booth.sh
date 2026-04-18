@@ -17,7 +17,7 @@ echo -e "\n🚀 Proceeding with startup sequence..."
 # Bulletproof: Kill any zombie processes from previous crashed runs before starting
 echo "🧹 Cleaning up old processes..."
 pkill -f "chromium" || true
-pkill -f "node" || true
+pkill -f "server/index.ts" || true
 pkill -f "unclutter" || true
 
 # Bulletproof: Define trap EARLY so if the script fails during startup, we still clean up!
@@ -27,8 +27,8 @@ pkill -f "unclutter" || true
 cleanup() {
     set +e
     echo "🛑 Shutting down Photobooth..."
-    kill $SERVER_PID $VITE_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null
-    wait $SERVER_PID $VITE_PID $CHROMIUM_PID 2>/dev/null
+    kill $SERVER_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null
+    wait $SERVER_PID $CHROMIUM_PID 2>/dev/null
     echo "👋 Photobooth stopped."
 }
 trap cleanup SIGINT SIGTERM EXIT
@@ -117,26 +117,23 @@ fi
 echo "🚀 Starting servers..."
 
 # Start the Node/Express backend in the background
+# In production, this server now also serves the static files from /dist
 npm run start:server > server.log 2>&1 &
 SERVER_PID=$!
 
-# Start the Vite frontend in the background
-npm run dev > vite.log 2>&1 &
-VITE_PID=$!
-
 # Best Practice: Port Polling. Instead of an arbitrary 'sleep', we wait for the port to open.
 # This prevents the white screen of death if Chromium launches faster than Vite.
-echo "⏳ Waiting for frontend server to become available on port 3000..."
+echo "⏳ Waiting for backend server to become available on port 3001..."
 MAX_RETRIES=60
 RETRY_COUNT=0
-# Loop until a curl to localhost:3000 succeeds
-while ! curl --output /dev/null --silent --head --fail http://localhost:3000; do
+# Loop until a curl to localhost:3001 succeeds
+while ! curl --output /dev/null --silent --head --fail http://localhost:3001; do
     sleep 0.5
     RETRY_COUNT=$((RETRY_COUNT+1))
     if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-        echo "❌ Timeout waiting for server on port 3000"
+        echo "❌ Timeout waiting for server on port 3001"
         # We clean up everything if the server never comes online
-        kill $SERVER_PID $VITE_PID $UNCLUTTER_PID 2>/dev/null || true
+        kill $SERVER_PID $UNCLUTTER_PID 2>/dev/null || true
         exit 1
     fi
 done
@@ -156,8 +153,9 @@ echo "🖥️ Launching Kiosk UI..."
 # --disable-features=Translate,TranslateUI: Prevents a translate bar from appearing over the UI.
 # --disable-background-networking: Stops Chromium from phoning home for telemetry/safebrowsing over conference wifi.
 # --disable-sync: Disables all sync features since there is no user profile.
+# --autoplay-policy=no-user-gesture-required: Allows media to play automatically.
 # --disk-cache-dir=/tmp/chromium-cache: Use a real temp dir instead of /dev/null to avoid errors.
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --disk-cache-dir=/tmp/chromium-cache --js-flags=\"--max-old-space-size=512\""
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --autoplay-policy=no-user-gesture-required --disk-cache-dir=/tmp/chromium-cache --js-flags=\"--max-old-space-size=512\""
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.
@@ -165,19 +163,19 @@ set +e
 
 # Bulletproof: Run Chromium in the background so we can monitor all crashes simultaneously
 if command -v chromium-browser &> /dev/null; then
-    chromium-browser $CHROMIUM_FLAGS http://localhost:3000 &
+    chromium-browser $CHROMIUM_FLAGS http://localhost:3001 &
     CHROMIUM_PID=$!
 elif command -v chromium &> /dev/null; then
-    chromium $CHROMIUM_FLAGS http://localhost:3000 &
+    chromium $CHROMIUM_FLAGS http://localhost:3001 &
     CHROMIUM_PID=$!
 else
-    echo "🌍 Chromium not found. Open http://localhost:3000 in your browser!"
+    echo "🌍 Chromium not found. Open http://localhost:3001 in your browser!"
     # Since we didn't start Chromium, we just fallback to waiting on the servers
-    wait -n $SERVER_PID $VITE_PID
+    wait -n $SERVER_PID
     exit
 fi
 
 # Best Practice: 'wait -n' waits for ANY of the background processes to exit.
 # This means if Chromium, the backend, OR the frontend crashes, the entire script cleanly exits.
 # If wrapped in an OS service (like systemd), this ensures the whole booth automatically restarts instantly!
-wait -n $SERVER_PID $VITE_PID $CHROMIUM_PID
+wait -n $SERVER_PID $CHROMIUM_PID
