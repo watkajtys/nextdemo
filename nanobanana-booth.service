@@ -10,11 +10,14 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-User=pi
+User=jules
 Environment=DISPLAY=:0
-WorkingDirectory=/home/pi/nextdemo
+WorkingDirectory=/home/jules/photobooth
 
-ExecStart=/home/pi/nextdemo/start-booth.sh
+ExecStart=/home/jules/photobooth/start-booth.sh
+
+StandardOutput=journal
+StandardError=journal
 
 # Always restart if the script exits for any reason
 Restart=always
