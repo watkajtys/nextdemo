@@ -88,7 +88,7 @@ class CameraManager {
             const ffmpeg = spawn('ffmpeg', [
                 '-f', 'v4l2',
                 '-input_format', 'mjpeg',
-                '-video_size', '1280x960',
+                '-video_size', '1920x1080',
                 '-i', '/dev/video0',
                 '-vf', 'crop=in_h:in_h,scale=640:640',
                 '-f', 'mpjpeg',
@@ -142,9 +142,9 @@ class CameraManager {
                     }
 
                     // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
-                    // We capture at 1280x960 (same as the preview stream to prevent hardware freeze)
-                    // and crop=in_h:in_h to grab a perfect 960x960 square.
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1280x960 -i /dev/video0 -vframes 1 -vf "crop=in_h:in_h" "${filePath}" -y`;
+                    // We capture at 1920x1080 (same as the preview stream to prevent hardware freeze)
+                    // and crop=in_h:in_h to grab a perfect 1080x1080 square.
+                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vframes 1 -vf "crop=in_h:in_h" "${filePath}" -y`;
                     
                     await new Promise<void>((resolve, reject) => {
                         const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
