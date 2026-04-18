@@ -224,8 +224,9 @@ async function processSyncQueue() {
             const filePath = path.join(QUEUE_DIR, file);
             const stats = await fs.stat(filePath);
             
-            // Clear out any old ghost files stuck in the queue from this morning!
-            if (now - stats.mtimeMs > 60 * 60 * 1000) {
+            // Clear out any old ghost files stuck in the queue!
+            // We aggressively purge anything older than 5 minutes to instantly drop the backlog of old, identical frozen frames from earlier testing that are currently clogging the upload pipe to Nanobanana!
+            if (now - stats.mtimeMs > 5 * 60 * 1000) {
                 console.log(`🧹 Deleting old stuck file from queue: ${file}`);
                 await fs.unlink(filePath).catch(() => {});
                 continue;
