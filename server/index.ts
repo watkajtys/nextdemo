@@ -366,7 +366,7 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
 app.post('/api/process', requireSecret, upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
     try {
-        const result = await processImage(req.file.buffer);
+        const result = await processImage(req.file.buffer, undefined, true);
         res.status(200).json({ printData: result });
     } catch (e) {
         res.status(500).json({ error: (e as Error).message });
@@ -449,3 +449,4 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
+ port ${PORT}`));
