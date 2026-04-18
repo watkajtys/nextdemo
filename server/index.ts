@@ -143,8 +143,9 @@ class CameraManager {
 
                     // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
                     // We capture at 1920x1080 (same as the preview stream to prevent hardware freeze)
+                    // We use select='eq(n\,15)' to discard the first 15 stale hardware ring-buffer frames and only save the true live 16th frame.
                     // and crop=in_h:in_h to grab a perfect 1080x1080 square.
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vframes 1 -vf "crop=in_h:in_h" "${filePath}" -y`;
+                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "select='eq(n\\,15)',crop=in_h:in_h" -vframes 1 "${filePath}" -y`;
                     
                     await new Promise<void>((resolve, reject) => {
                         const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
