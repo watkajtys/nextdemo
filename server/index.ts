@@ -354,7 +354,10 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
 
 app.get('/api/preview', (req, res) => cameraManager.startPreview(res));
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     // Bypass secret requirement for local requests
