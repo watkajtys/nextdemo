@@ -143,8 +143,10 @@ class CameraManager {
 
                     // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
                     // crop=in_h:in_h ensures a perfect square
-                    // We read 15 frames to flush the hardware ring-buffer, and use select='eq(n\,15)' to ONLY save the live 15th frame
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "crop=in_h:in_h,select='eq(n\\,15)'" -vframes 1 "${filePath}" -y`;
+                    // CRITICAL FIX: We MUST capture at 640x480 to match the preview stream! 
+                    // Switching the camera to 1920x1080 causes a known firmware bug in some webcams 
+                    // where the 1080p buffer freezes and returns the exact same stale image forever.
+                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 640x480 -i /dev/video0 -vframes 1 -vf "crop=in_h:in_h" "${filePath}" -y`;
                     
                     await new Promise<void>((resolve, reject) => {
                         const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
