@@ -55,53 +55,70 @@ setInterval(() => {
 class CameraManager {
     private isCapturing = false;
     private previewProcess: import('child_process').ChildProcess | null = null;
-    private clients: Set<Response> = new Set();
+    private clients: Set<import('express').Response> = new Set();
+    private latestFrame: Buffer | null = null;
+    private frameBuffer: Buffer = Buffer.alloc(0);
 
-    async stopPreview() {
-        if (this.previewProcess) {
-            // CRITICAL: We must stop the preview to release the /dev/video0 hardware lock.
-            // Arducam/libcamera cannot be shared by multiple processes on the Pi.
-            console.log('🎥 Stopping singleton preview for capture...');
-            const proc = this.previewProcess;
-            this.previewProcess = null;
-            proc.kill('SIGKILL');
-            // Give the OS/V4L2 driver a moment to fully release the device handle.
-            await new Promise(resolve => setTimeout(resolve, 1200));
-        }
-    }
-
-    startPreview(res: Response) {
-        if (this.isCapturing) {
+    startPreview(res?: import('express').Response) {
+        if (this.isCapturing && res) {
             res.status(503).send('Camera is busy capturing');
             return;
         }
 
-        this.clients.add(res);
-        // MJPEG Stream: Browser treats this as a single image that constantly refreshes.
-        res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
+        if (res) {
+            this.clients.add(res);
+            res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
+        }
 
         if (!this.previewProcess) {
-            console.log('🎥 Spawning singleton MJPEG preview stream...');
-            // CRITICAL FIX: We use 'spawn' instead of 'exec'. 
-            // 'exec' attempts to buffer and decode stdout as UTF-8 string, which corrupts binary JPEG bytes.
-            // 'spawn' provides a raw stream, allowing us to pipe pure binary chunks to the client.
+            console.log('🎥 Spawning singleton MJPEG stream at 1080x1080 (Zero-Shutter-Lag Mode)...');
+            // We use ffmpeg at full 1080p resolution and NEVER stop it!
+            // This prevents the Pi 5 V4L2 hardware from freezing and ensures AGC/AWB are perfectly converged.
             const ffmpeg = spawn('ffmpeg', [
                 '-f', 'v4l2',
                 '-input_format', 'mjpeg',
-                '-video_size', '640x480',
+                '-video_size', '1920x1080',
                 '-i', '/dev/video0',
-                '-vf', 'crop=in_h:in_h',
+                '-vf', 'crop=in_h:in_h,scale=1080:1080',
                 '-f', 'mpjpeg',
-                '-q:v', '8',
+                '-q:v', '2', // High quality for the captures
                 '-boundary_tag', 'frame',
                 'pipe:1'
             ]);
             this.previewProcess = ffmpeg;
 
             ffmpeg.stdout?.on('data', (data) => {
-                // 'data' is a Buffer; we write it directly to the socket to preserve binary integrity.
+                // Stream to all connected browser clients
                 for (const client of this.clients) {
                     client.write(data);
+                }
+
+                // Append to our rolling frame buffer
+                this.frameBuffer = Buffer.concat([this.frameBuffer, data]);
+                
+                // Parse the MJPEG stream to continuously pluck out the absolute latest complete JPEG!
+                // JPEG magic numbers: start FF D8, end FF D9
+                let startIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
+                while (startIdx !== -1) {
+                    const endIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD9]), startIdx);
+                    if (endIdx !== -1) {
+                        // We found a complete frame! Create a true copy in memory.
+                        this.latestFrame = Buffer.from(this.frameBuffer.subarray(startIdx, endIdx + 2));
+                        // Trim the buffer
+                        this.frameBuffer = this.frameBuffer.subarray(endIdx + 2);
+                        // Look for another frame in the remaining buffer
+                        startIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
+                    } else {
+                        // Frame is incomplete, wait for more data
+                        if (startIdx > 0) {
+                            this.frameBuffer = Buffer.from(this.frameBuffer.subarray(startIdx));
+                        }
+                        break;
+                    }
+                }
+                // Safety valve to prevent unbounded memory growth if the stream corrupts
+                if (this.frameBuffer.length > 10000000) {
+                    this.frameBuffer = Buffer.alloc(0);
                 }
             });
 
@@ -112,63 +129,48 @@ class CameraManager {
                     client.end();
                 }
                 this.clients.clear();
+                
+                // Auto-restart stream if it crashes, keeping the camera alive!
+                setTimeout(() => this.startPreview(), 2000);
             });
         }
 
-        res.on('close', () => {
+        res?.on('close', () => {
             this.clients.delete(res);
-            if (this.clients.size === 0 && this.previewProcess) {
-                console.log('🎥 No more clients, killing preview stream.');
-                this.previewProcess.kill('SIGKILL');
-                this.previewProcess = null;
-            }
+            // WE NO LONGER KILL THE PREVIEW STREAM!
+            // By leaving it running, we eliminate the 1200ms startup delay, 
+            // completely prevent the V4L2 stale-frame freeze bug, 
+            // and guarantee instantaneous photo captures.
         });
     }
 
-    async captureImage(filePath: string, retries = 3): Promise<void> {
+    async captureImage(filePath: string): Promise<void> {
         if (this.isCapturing) throw new Error('Already capturing');
         this.isCapturing = true;
         
         try {
-            await this.stopPreview();
-            for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                    console.log(`📸 Arducam Capture Attempt ${attempt}/${retries}...`);
-                    
-                    try {
-                        await fs.access('/dev/video0');
-                    } catch {
-                        throw new Error('Camera device /dev/video0 not found');
-                    }
-
-                    // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
-                    // crop=in_h:in_h ensures a perfect square
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "crop=in_h:in_h" -frames:v 1 "${filePath}" -y`;
-                    
-                    await new Promise<void>((resolve, reject) => {
-                        const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
-                        exec(captureCmd, (error, stdout, stderr) => {
-                            clearTimeout(timeout);
-                            if (error) {
-                                console.error(`FFmpeg Error (Attempt ${attempt}):`, stderr);
-                                reject(error);
-                            } else {
-                                resolve();
-                            }
-                        });
-                    });
-
-                    const stats = await fs.stat(filePath);
-                    if (stats.size < 1000) throw new Error('Captured file is too small');
-                    
-                    return; 
-                } catch (err) {
-                    console.error(`⚠️ Attempt ${attempt} failed:`, (err as Error).message);
-                    if (attempt === retries) throw err;
-                    // Wait for device to settle on USB
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
+            console.log(`📸 Arducam Zero-Shutter-Lag Capture...`);
+            
+            // If the stream isn't running, start it
+            if (!this.latestFrame) {
+                this.startPreview();
             }
+
+            // Wait up to 5 seconds for a clean frame to arrive in the pipeline
+            for (let i = 0; i < 50; i++) {
+                if (this.latestFrame) break;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            if (!this.latestFrame) throw new Error('Camera stream failed to produce a frame');
+            
+            // Instantly save the exact frame the user just saw on the screen!
+            await fs.writeFile(filePath, this.latestFrame!);
+            
+            const stats = await fs.stat(filePath);
+            if (stats.size < 1000) throw new Error('Captured file is too small');
+            
+            console.log(`✅ Captured fresh 1080x1080 frame (${stats.size} bytes)`);
         } finally {
             this.isCapturing = false;
         }
@@ -496,4 +498,3 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
-log(`☁️ Photobooth running on port ${PORT}`));
