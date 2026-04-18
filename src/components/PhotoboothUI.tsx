@@ -37,10 +37,8 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
     const [processing, setProcessing] = useState(false);
     const [loadingMessageIdx, setLoadingMessageIdx] = useState(0);
 
-    // WebRTC references
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [streamActive, setStreamActive] = useState(false);
+    const apiBaseUrl = window.location.origin.replace(':3000', '') + ':3001';
+    const [previewUrl, setPreviewUrl] = useState(`${apiBaseUrl}/api/preview`);
 
     // Cycle wait screen messages
     useEffect(() => {
@@ -56,32 +54,12 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         return () => clearInterval(interval);
     }, [processing]);
 
-    // Initialize the hardware camera instantly on mount so there's no delay when they press the button
-    const startCamera = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    advanced: [{ focusMode: "continuous" } as any]
-                }
-            });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                setStreamActive(true);
-            }
-        } catch (err) {
-            console.error("WebRTC Arducam Error:", err);
-        }
+    const startCamera = () => {
+        setPreviewUrl(`${apiBaseUrl}/api/preview?t=${Date.now()}`);
     };
 
     const stopCamera = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            const stream = videoRef.current.srcObject as MediaStream;
-            stream.getTracks().forEach(track => track.stop());
-            videoRef.current.srcObject = null;
-            setStreamActive(false);
-        }
+        setPreviewUrl('');
     };
 
     useEffect(() => {
@@ -276,11 +254,9 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 }`}>
                 {/* Polaroid Frame container (Upright) */}
                 <div className={`relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-in-out ${processing ? 'opacity-0 scale-90 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
+                    <img
+                        src={previewUrl}
+                        alt="Camera Preview"
                         className="aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] scale-x-[-1] bg-black object-cover shadow-inner"
                     />
                     <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
@@ -324,8 +300,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                     )}
                 </AnimatePresence>
             </div>
-            {/* Hidden canvas purely for extracting the still frame */}
-            <canvas ref={canvasRef} className="hidden" />
+            {/* Hidden canvas purely for extracting the still frame (Removed: no longer needed with backend capture) */}
 
             {/* Cinematic Camera Flash */}
             <AnimatePresence>

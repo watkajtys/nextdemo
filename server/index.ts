@@ -2,14 +2,16 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
-import crypto from 'crypto';
-import { exec, ChildProcess } from 'child_process';
+import { exec } from 'child_process';
 import util from 'util';
 import { GoogleGenAI } from '@google/genai';
+import { jules } from '@google/jules-sdk';
+import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
+import QRCode from 'qrcode';
+import thermal from './print';
 
 const execPromise = util.promisify(exec);
 
@@ -36,11 +38,12 @@ function updateJob(id: string, update: Partial<Job>) {
 
 /**
  * CameraManager: Coordinates hardware access to /dev/video0.
- * Enhanced with Hardware Watchdog and Retry logic for Pi 5 USB stability.
+ * Simplified: Preview is handled by the browser (WebRTC). 
+ * This class ONLY handles high-res capture.
  */
 class CameraManager {
-    private previewProcess: ChildProcess | null = null;
     private isCapturing = false;
+    private previewProcess: import('child_process').ChildProcess | null = null;
     private clients: Set<Response> = new Set();
 
     async stopPreview() {
@@ -65,33 +68,32 @@ class CameraManager {
 
         if (!this.previewProcess) {
             console.log('🎥 Spawning singleton MJPEG preview stream...');
-            // Corrected flag: -boundary -> -boundary_tag
-            const ffmpeg = exec(`ffmpeg -f v4l2 -input_format mjpeg -video_size 640x480 -i /dev/video0 -vf "crop=h:h" -f mpjpeg -q:v 8 -boundary_tag frame pipe:1`);
+            const ffmpeg = exec(`ffmpeg -f v4l2 -input_format mjpeg -video_size 640x480 -i /dev/video0 -vf "crop=in_h:in_h" -f mpjpeg -q:v 8 -boundary_tag frame pipe:1`);
             this.previewProcess = ffmpeg;
 
-            ffmpeg.stderr?.on('data', (data) => {
-                console.log(`[ffmpeg] ${data.toString().trim()}`);
+            ffmpeg.stdout?.on('data', (data) => {
+                for (const client of this.clients) {
+                    client.write(data);
+                }
             });
 
             ffmpeg.on('exit', (code) => {
                 console.log(`🎥 ffmpeg exited with code ${code}`);
                 this.previewProcess = null;
                 for (const client of this.clients) {
-                    if (!client.writableEnded) client.end();
+                    client.end();
                 }
                 this.clients.clear();
             });
         }
 
-        this.previewProcess.stdout?.pipe(res, { end: false });
-
         res.on('close', () => {
             this.clients.delete(res);
-            setTimeout(() => {
-                if (this.clients.size === 0 && this.previewProcess && !this.isCapturing) {
-                    this.stopPreview();
-                }
-            }, 10000);
+            if (this.clients.size === 0 && this.previewProcess) {
+                console.log('🎥 No more clients, killing preview stream.');
+                this.previewProcess.kill('SIGKILL');
+                this.previewProcess = null;
+            }
         });
     }
 
@@ -101,7 +103,6 @@ class CameraManager {
         
         try {
             await this.stopPreview();
-            
             for (let attempt = 1; attempt <= retries; attempt++) {
                 try {
                     console.log(`📸 Arducam Capture Attempt ${attempt}/${retries}...`);
@@ -112,14 +113,20 @@ class CameraManager {
                         throw new Error('Camera device /dev/video0 not found');
                     }
 
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "crop=1080:1080" -frames:v 1 "${filePath}" -y`;
+                    // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
+                    // crop=in_h:in_h ensures a perfect square
+                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "crop=in_h:in_h" -frames:v 1 "${filePath}" -y`;
                     
                     await new Promise<void>((resolve, reject) => {
-                        const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 12000);
-                        exec(captureCmd, (error) => {
+                        const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
+                        exec(captureCmd, (error, stdout, stderr) => {
                             clearTimeout(timeout);
-                            if (error) reject(error);
-                            else resolve();
+                            if (error) {
+                                console.error(`FFmpeg Error (Attempt ${attempt}):`, stderr);
+                                reject(error);
+                            } else {
+                                resolve();
+                            }
                         });
                     });
 
@@ -130,6 +137,7 @@ class CameraManager {
                 } catch (err) {
                     console.error(`⚠️ Attempt ${attempt} failed:`, (err as Error).message);
                     if (attempt === retries) throw err;
+                    // Wait for device to settle on USB
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
             }
@@ -140,11 +148,8 @@ class CameraManager {
 }
 
 const cameraManager = new CameraManager();
-
-import { jules } from '@google/jules-sdk';
-import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
-import QRCode from 'qrcode';
-import thermal from './print';
+const printerHardware = thermal();
+const app = express();
 
 const fontsDir = path.join(process.cwd(), 'jules.ink', 'assets', 'fonts');
 try {
@@ -152,13 +157,10 @@ try {
     GlobalFonts.registerFromPath(path.join(fontsDir, 'JetBrainsMono-Regular.ttf'), 'LabelMono');
 } catch (e) {}
 
-const printerHardware = thermal();
-const app = express();
-
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.use('/portraits', express.static(path.join(process.cwd(), 'public', 'portraits')));
-app.use(express.json({ verify: (req: any, res, buf) => { req.rawBody = buf; } }));
+app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'portraits');
@@ -188,10 +190,7 @@ async function syncToCloud(imageBuffer: Buffer) {
         
         if (res.ok) {
             const data = await res.json();
-            console.log('☁️ Cloud sync successful:', data?.printData?.portraitId);
             return data.printData;
-        } else {
-            console.error('☁️ Cloud sync failed with status:', res.status);
         }
     } catch (e) {
         console.error('☁️ Cloud sync error:', (e as Error).message);
@@ -218,7 +217,6 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
     let stylizedBuffer = imageBuffer;
     let fileExt = 'jpg';
 
-    // 1. Stylize locally first for instant feedback at the Kiosk
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local Gemini stylization...');
@@ -233,9 +231,25 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
 
             const part = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
             if (part && (part as any).inlineData) {
-                stylizedBuffer = Buffer.from((part as any).inlineData.data, 'base64');
+                const rawStylized = Buffer.from((part as any).inlineData.data, 'base64');
+                
+                // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
+                const img = await loadImage(rawStylized);
+                const canvas = createCanvas(img.width, img.height);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                    const val = brightness > 128 ? 255 : 0;
+                    data[i] = data[i+1] = data[i+2] = val;
+                }
+                ctx.putImageData(imageData, 0, 0);
+                stylizedBuffer = canvas.toBuffer('image/png');
                 fileExt = 'png';
-                console.log('🎨 Local Gemini stylization successful');
+                console.log('🎨 Gemini stylization + Thresholding successful');
             }
         } catch (e) { console.error('🎨 Gemini failed:', (e as Error).message); }
     }
@@ -245,24 +259,20 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string) {
     await fs.writeFile(imagePath, stylizedBuffer);
     const publicUrl = `/portraits/${imageFileName}`;
 
-    // 2. Fire-and-forget sync to the Cloud for the public Mosaic gallery (nanobanana2)
     syncToCloud(imageBuffer).catch(err => console.error('Background cloud sync failed:', err));
 
     let julesSessionId: string | undefined;
     if (process.env.JULES_API_KEY) {
         try {
-            console.log('🤖 Starting Jules storytelling...');
             const session = await jules.session({
                 prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required.`,
                 source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
                 autoPr: true,
             });
             julesSessionId = session.id;
-            console.log(`🤖 Jules session created: ${julesSessionId}`);
         } catch(e) { console.error('🤖 Jules failed:', (e as Error).message); }
     }
 
-    // 3. Automatically trigger local physical print!
     triggerPrint(publicUrl, portraitId, julesSessionId).catch(console.error);
 
     return { publicUrl, imageUrl: publicUrl, portraitId, julesSessionId };
@@ -274,14 +284,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.post('/api/process', upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
-    
     try {
-        console.log('📥 [API] Received image for processing via /api/process');
         const result = await processImage(req.file.buffer);
-        console.log('✅ [API] Processing complete, returning result');
         res.status(200).json({ printData: result });
     } catch (e) {
-        console.error('❌ [API] /api/process failed:', (e as Error).message);
         res.status(500).json({ error: (e as Error).message });
     }
 });
@@ -299,8 +305,7 @@ app.post('/api/capture', async (req, res) => {
 
     (async () => {
         try {
-            const uniqueId = `raw-${Date.now()}`;
-            const rawFileName = `${uniqueId}.jpg`;
+            const rawFileName = `raw-${Date.now()}.jpg`;
             const rawFilePath = path.join(UPLOADS_DIR, rawFileName);
 
             await cameraManager.captureImage(rawFilePath);
@@ -319,16 +324,10 @@ app.post('/api/capture', async (req, res) => {
 app.post('/api/save-for-print', async (req, res) => {
     try {
         let { imageUrl, portraitId, julesSessionId } = req.body;
-        console.log(`🖨️ [Print] Request received for ${portraitId}`);
         if (!imageUrl || !portraitId) return res.status(400).json({ error: 'Missing data' });
-        portraitId = path.basename(portraitId);
         
-        // Resolve URL (handle both relative /portraits and absolute)
-        let fetchUrl = imageUrl;
-        if (imageUrl.startsWith('/')) {
-            fetchUrl = `http://localhost:${PORT}${imageUrl}`;
-        }
-        console.log(`🖨️ [Print] Fetching image from ${fetchUrl}`);
+        portraitId = path.basename(portraitId);
+        let fetchUrl = imageUrl.startsWith('/') ? `http://localhost:${PORT}${imageUrl}` : imageUrl;
 
         const response = await fetch(fetchUrl);
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -338,7 +337,6 @@ app.post('/api/save-for-print', async (req, res) => {
         const jsonPath = path.join(SPOOL_DIR, `${portraitId}.json`);
         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: false }, null, 2));
 
-        console.log(`🖨️ [Print] Spooling to canvas for ${portraitId}...`);
         const canvas = createCanvas(1200, 1800);
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = 'white';
@@ -357,19 +355,14 @@ app.post('/api/save-for-print', async (req, res) => {
             try {
                 const printer = await printerHardware.find();
                 if (printer) {
-                    console.log(`🖨️ [Hardware] Printing to ${printer.name}...`);
                     await printerHardware.fix(printer.name);
                     await printerHardware.print(printer.name, labelBuffer, { fit: true, media: 'w288h432' });
                     await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
-                    console.log(`🖨️ [Hardware] Print successful for ${portraitId}`);
-                } else {
-                    console.warn('🖨️ [Hardware] No USB printer found!');
                 }
             } catch (e) { console.error('❌ [Hardware] Print failed:', e); }
         });
         res.status(200).json({ success: true });
     } catch (e) { 
-        console.error('❌ [Print] Error in /api/save-for-print:', e);
         res.status(500).json({ error: (e as Error).message }); 
     }
 });
