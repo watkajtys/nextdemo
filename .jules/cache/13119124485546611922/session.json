@@ -1,0 +1,25 @@
+{
+  "resource": {
+    "name": "sessions/13119124485546611922",
+    "sourceContext": {
+      "source": "sources/github/watkajtys/nextdemo",
+      "githubRepoContext": {
+        "startingBranch": "main"
+      }
+    },
+    "prompt": "A new 1-bit high-contrast portrait was captured! ![portrait](http://localhost:3001/portraits/portrait-1776463594911.png). Storytelling required.",
+    "url": "https://jules.google.com/session/13119124485546611922",
+    "requirePlanApproval": true,
+    "id": "13119124485546611922",
+    "automationMode": "AUTO_CREATE_PR",
+    "archived": false,
+    "state": "unspecified",
+    "outputs": [],
+    "outcome": {
+      "sessionId": "13119124485546611922",
+      "state": "completed",
+      "outputs": []
+    }
+  },
+  "_lastSyncedAt": 1776463617141
+}
