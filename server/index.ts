@@ -143,7 +143,8 @@ class CameraManager {
 
                     // Use explicit v4l2 input with mjpeg format for Pi 5 compatibility
                     // crop=in_h:in_h ensures a perfect square
-                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vf "crop=in_h:in_h" -frames:v 1 "${filePath}" -y`;
+                    // We capture 15 frames and overwrite to completely flush the stale hardware ring-buffer
+                    const captureCmd = `ffmpeg -f v4l2 -input_format mjpeg -video_size 1920x1080 -i /dev/video0 -vframes 15 -update 1 -vf "crop=in_h:in_h" "${filePath}" -y`;
                     
                     await new Promise<void>((resolve, reject) => {
                         const timeout = setTimeout(() => reject(new Error('FFmpeg timeout')), 15000);
@@ -432,7 +433,7 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         if (!imageUrl.startsWith('/')) {
             return res.status(400).json({ error: 'Invalid imageUrl: Must be a relative path' });
         }
-        let fetchUrl = `http://localhost:${PORT}${imageUrl}`;
+        let fetchUrl = `http://127.0.0.1:${PORT}${imageUrl}`;
 
         const response = await fetch(fetchUrl);
         if (!response.ok) throw new Error(`Failed to fetch image: HTTP ${response.status}`);
@@ -474,3 +475,4 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
+log(`☁️ Photobooth running on port ${PORT}`));

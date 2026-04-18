@@ -90,11 +90,14 @@ export default function thermal() {
     );
 
     if (bad) {
+      // Clear the backlog of old stuck jobs before unpausing,
+      // so it doesn't print photos from hours ago!
+      await run(`cancel -a "${name}"`).catch(() => {});
       await Promise.all([
         run(`cupsenable "${name}"`),
         run(`cupsaccept "${name}"`),
       ]);
-      console.log(`✨ healed: ${name}`);
+      console.log(`✨ healed and cleared queue for: ${name}`);
     }
   };
 
