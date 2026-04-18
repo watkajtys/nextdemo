@@ -252,11 +252,15 @@ async function triggerPrint(imageUrl: string, portraitId: string, julesSessionId
             headers['Authorization'] = `Bearer ${process.env.BOOTH_SECRET}`;
         }
         
-        await fetch(`${apiBaseUrl}/api/save-for-print`, {
+        const response = await fetch(`${apiBaseUrl}/api/save-for-print`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ imageUrl, portraitId, julesSessionId })
         });
+        
+        if (!response.ok) {
+            throw new Error(`Print API returned HTTP ${response.status}`);
+        }
     } catch (e) {
         console.error('❌ [AutoPrint] Failed to trigger print:', (e as Error).message);
     }
@@ -450,3 +454,10 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
  port ${PORT}`));
+s Error).message }); 
+    }
+});
+
+app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
+ port ${PORT}`));
+{PORT}`));
