@@ -216,8 +216,14 @@ async function processSyncQueue() {
             const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
             formData.append('image', blob, 'capture.jpg');
 
+            const headers: Record<string, string> = {};
+            if (process.env.BOOTH_SECRET) {
+                headers['Authorization'] = `Bearer ${process.env.BOOTH_SECRET}`;
+            }
+
             const res = await fetch(`${cloudUrl}/api/process`, {
                 method: 'POST',
+                headers,
                 body: formData
             });
             
@@ -241,9 +247,14 @@ async function triggerPrint(imageUrl: string, portraitId: string, julesSessionId
     const apiBaseUrl = `http://localhost:${PORT}`;
     try {
         console.log(`🖨️ [AutoPrint] Triggering local print for ${portraitId}...`);
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (process.env.BOOTH_SECRET) {
+            headers['Authorization'] = `Bearer ${process.env.BOOTH_SECRET}`;
+        }
+        
         await fetch(`${apiBaseUrl}/api/save-for-print`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ imageUrl, portraitId, julesSessionId })
         });
     } catch (e) {
@@ -331,7 +342,28 @@ app.get('/api/preview', (req, res) => cameraManager.startPreview(res));
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.post('/api/process', upload.single('image'), async (req, res) => {
+const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Bypass secret requirement for local requests
+    if (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1') {
+        return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    const secret = process.env.BOOTH_SECRET;
+    
+    if (!secret) {
+        console.warn(`⚠️ BOOTH_SECRET is not set. API request from ${req.ip} might be unsecured.`);
+        return next();
+    }
+    
+    if (!authHeader || authHeader !== `Bearer ${secret}`) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    next();
+};
+
+app.post('/api/process', requireSecret, upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
     try {
         const result = await processImage(req.file.buffer);
@@ -347,7 +379,7 @@ app.get('/api/job/:id', (req, res) => {
     res.status(200).json(job);
 });
 
-app.post('/api/capture', async (req, res) => {
+app.post('/api/capture', requireSecret, async (req, res) => {
     const jobId = `job-${Date.now()}`;
     updateJob(jobId, { id: jobId, status: 'snapping' });
     res.status(202).json({ jobId });
@@ -370,7 +402,7 @@ app.post('/api/capture', async (req, res) => {
     })();
 });
 
-app.post('/api/save-for-print', async (req, res) => {
+app.post('/api/save-for-print', requireSecret, async (req, res) => {
     try {
         let { imageUrl, portraitId, julesSessionId } = req.body;
         if (!imageUrl || !portraitId) return res.status(400).json({ error: 'Missing data' });
