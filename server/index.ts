@@ -100,22 +100,26 @@ class CameraManager {
                 // Append to our rolling frame buffer
                 this.frameBuffer = Buffer.concat([this.frameBuffer, data]);
                 
-                // Parse the MJPEG stream to continuously pluck out the absolute latest complete JPEG!
-                // JPEG magic numbers: start FF D8, end FF D9
-                let startIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
-                while (startIdx !== -1) {
-                    const endIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD9]), startIdx);
-                    if (endIdx !== -1) {
-                        // We found a complete frame! Create a true copy in memory.
-                        this.latestFrame = Buffer.from(this.frameBuffer.subarray(startIdx, endIdx + 2));
-                        // Trim the buffer
-                        this.frameBuffer = this.frameBuffer.subarray(endIdx + 2);
-                        // Look for another frame in the remaining buffer
-                        startIdx = this.frameBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
+                // Parse the MJPEG stream using boundary tags to avoid extracting embedded EXIF thumbnails!
+                // Arducam/V4L2 may inject stale thumbnails, so we MUST extract the entire frame payload.
+                let boundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'));
+                while (boundaryIdx !== -1) {
+                    const nextBoundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'), boundaryIdx + 7);
+                    if (nextBoundaryIdx !== -1) {
+                        // Extract everything between the two boundaries
+                        const chunk = this.frameBuffer.subarray(boundaryIdx, nextBoundaryIdx);
+                        // Find the start of the JPEG data (after the HTTP headers)
+                        const jpegStart = chunk.indexOf(Buffer.from([0xFF, 0xD8]));
+                        if (jpegStart !== -1) {
+                            // Copy the entire true JPEG payload
+                            this.latestFrame = Buffer.from(chunk.subarray(jpegStart));
+                        }
+                        this.frameBuffer = this.frameBuffer.subarray(nextBoundaryIdx);
+                        boundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'));
                     } else {
-                        // Frame is incomplete, wait for more data
-                        if (startIdx > 0) {
-                            this.frameBuffer = Buffer.from(this.frameBuffer.subarray(startIdx));
+                        // Keep the remaining buffer and wait for the next boundary
+                        if (boundaryIdx > 0) {
+                            this.frameBuffer = Buffer.from(this.frameBuffer.subarray(boundaryIdx));
                         }
                         break;
                     }
