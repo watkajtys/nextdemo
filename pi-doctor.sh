@@ -32,6 +32,18 @@ else
     echo -e "  [${BLUE}INFO${NC}] WiFi (wlan0) is not connected."
 fi
 
+# Check Tailscale
+if command -v tailscale &> /dev/null; then
+    TS_IP=$(tailscale ip -4 2>/dev/null || echo "")
+    if [ -n "$TS_IP" ]; then
+        echo -e "  [${GREEN}OK${NC}] Tailscale connected - IP: ${TS_IP}"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] Tailscale is installed but not connected."
+    fi
+else
+    echo -e "  [${YELLOW}WARN${NC}] Tailscale is NOT installed!"
+fi
+
 # Check Internet Access (Industry Standard Captive Portal Check)
 # Conferences often block ICMP (ping) or intercept traffic with hotel-style Captive Portals.
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")

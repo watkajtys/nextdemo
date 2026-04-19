@@ -129,6 +129,20 @@ if command -v unclutter &> /dev/null; then
     UNCLUTTER_PID=$!
 fi
 
+echo "🛡️ Verifying Secure Tailscale Tunnel to VPS..."
+if command -v tailscale &> /dev/null; then
+    echo "⏳ Waiting up to 15s for Tailscale network..."
+    # Ping the VPS's Tailscale IP to ensure the tunnel is fully established
+    if timeout 15s bash -c 'until ping -c 1 100.67.124.95 &> /dev/null; do sleep 1; done'; then
+        echo "✅ Secure tunnel to VPS established!"
+    else
+        echo "⚠️ Timeout waiting for VPS tunnel. Background sync might retry later."
+        if command -v zenity &> /dev/null; then
+            zenity --warning --title="Network Warning" --text="⚠️ Tailscale tunnel to VPS timed out. Uploads may fail temporarily." --timeout=5 &
+        fi
+    fi
+fi
+
 echo "🐍 Starting Python Picamera2 Microservice..."
 # Ensure flask is installed (picamera2 is preinstalled on Pi 5 OS)
 if ! python3 -c "import flask" &> /dev/null; then
