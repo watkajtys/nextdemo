@@ -54,6 +54,7 @@ else
     echo -e "\n  ${YELLOW}📷 ZERO-TOUCH WIFI SETUP 📷${NC}"
     echo -e "  ${BLUE}Please show a Wi-Fi QR Code from your phone to the camera... (Timeout in 30s)${NC}"
     
+    QR_SUCCESS=0
     if command -v zbarcam &> /dev/null; then
         # UX BEST PRACTICE: Export DISPLAY so zbarcam shows a live camera viewfinder feed.
         # This allows the staff to actually see what the lens sees and frame their phone perfectly.
@@ -83,28 +84,75 @@ else
                 # Verify connection has successfully routed
                 echo -e "  ${BLUE}Verifying connection...${NC}"
                 sleep 5
-                VERIFY=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
-                if [ "$VERIFY" == "204" ]; then
-                     echo -e "  [${GREEN}OK${NC}] Internet connected successfully!"
-                else
-                     CRITICAL_ERROR=1
-                     echo -e "  [${RED}FAIL${NC}] Connected to Wi-Fi, but no internet access (Status: $VERIFY). May require a browser login."
-                fi
+                QR_SUCCESS=1
             else
-                CRITICAL_ERROR=1
                 echo -e "  [${RED}FAIL${NC}] Could not extract SSID from the QR code! (String: $qr_output)"
             fi
         else
             echo -e "  [${RED}FAIL${NC}] Camera scan timed out or an invalid QR code was presented."
-            # Fallback to Graphical Touch UI disabled to prevent boot hangs
-            CRITICAL_ERROR=1
-            echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
         fi
     else
         echo -e "  [${YELLOW}WARN${NC}] 'zbar-tools' is not installed. Skipping camera scanner."
-        # Jump straight to Graphical fallback disabled to prevent boot hangs
-        CRITICAL_ERROR=1
-        echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
+    fi
+
+    # Re-verify after potential QR code setup
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
+    if [ "$STATUS" == "204" ]; then
+        echo -e "  [${GREEN}OK${NC}] Internet connected successfully!"
+    else
+        if [ "$QR_SUCCESS" -eq 1 ]; then
+            echo -e "  [${RED}FAIL${NC}] Connected to Wi-Fi, but no internet access. May require a Captive Portal login."
+        fi
+        
+        echo -e "\n  ${YELLOW}🖥️  MANUAL GUI FALLBACK 🖥️${NC}"
+        if command -v zenity &> /dev/null; then
+            export DISPLAY=:0
+            if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager and Web Browser to connect manually?" --timeout=15; then
+                echo -e "  ${BLUE}Opening GUI Network Manager and Browser...${NC}"
+                
+                # Network Manager GUI
+                if command -v nm-connection-editor &> /dev/null; then
+                    nm-connection-editor &
+                fi
+                
+                # On-screen keyboard
+                if command -v onboard &> /dev/null; then
+                    onboard &
+                elif command -v matchbox-keyboard &> /dev/null; then
+                    matchbox-keyboard &
+                fi
+                
+                # Browser pointing to a guaranteed non-HTTPS URL to trigger the Captive Portal redirect
+                if command -v chromium-browser &> /dev/null; then
+                    chromium-browser http://neverssl.com &
+                elif command -v chromium &> /dev/null; then
+                    chromium http://neverssl.com &
+                fi
+                
+                zenity --info --title="Waiting for Internet" --text="Please use the windows that just opened to connect to Wi-Fi and log into any Captive Portals.\n\nClick OK when you are connected to the internet."
+                
+                # Final verification
+                STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
+                if [ "$STATUS" == "204" ]; then
+                    echo -e "  [${GREEN}OK${NC}] Internet connected successfully via manual setup!"
+                else
+                    CRITICAL_ERROR=1
+                    echo -e "  [${RED}FAIL${NC}] Still no internet connection after manual setup."
+                fi
+                
+                # Cleanup the fallback GUIs
+                pkill -f "nm-connection-editor" || true
+                pkill -f "chromium" || true
+                pkill -f "onboard" || true
+                pkill -f "matchbox-keyboard" || true
+            else
+                CRITICAL_ERROR=1
+                echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
+            fi
+        else
+            CRITICAL_ERROR=1
+            echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
+        fi
     fi
 fi
 
