@@ -84,71 +84,15 @@ else
             fi
         else
             echo -e "  [${RED}FAIL${NC}] Camera scan timed out or an invalid QR code was presented."
-            # Fallback to Graphical Touch UI
-            export DISPLAY=:0
-            if command -v zenity &> /dev/null; then
-                echo -e "  ${YELLOW}Launching Touch-Screen Wi-Fi Selection...${NC}"
-                networks=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
-                
-                selected_ssid=$(echo "$networks" | zenity --list --title="Wi-Fi Setup" --text="Touch a network to connect:" --column="Available Networks" --width=600 --height=400 2>/dev/null)
-                
-                if [ -n "$selected_ssid" ]; then
-                    password=$(zenity --password --title="Wi-Fi Password" --text="Enter the password for $selected_ssid:" 2>/dev/null)
-                    echo -e "  ${BLUE}Connecting to $selected_ssid...${NC}"
-                    if [ -n "$password" ]; then
-                        sudo nmcli dev wifi connect "$selected_ssid" password "$password" &>/dev/null
-                    else
-                        sudo nmcli dev wifi connect "$selected_ssid" &>/dev/null
-                    fi
-                    
-                    sleep 5
-                    VERIFY3=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
-                    if [ "$VERIFY3" == "204" ]; then
-                        echo -e "  [${GREEN}OK${NC}] Internet connected via Touch GUI!"
-                        # Reset critical error since we saved the boot!
-                        CRITICAL_ERROR=0
-                    else
-                        CRITICAL_ERROR=1
-                        echo -e "  [${RED}FAIL${NC}] Failed to access true internet via Touch GUI (Status: $VERIFY3)."
-                    fi
-                else
-                    CRITICAL_ERROR=1
-                    echo -e "  [${RED}FAIL${NC}] Wi-Fi selection cancelled by user."
-                fi
-            else
-                CRITICAL_ERROR=1
-                echo -e "  [${YELLOW}WARN${NC}] 'zenity' package not installed. Touch GUI fallback unavailable."
-            fi
+            # Fallback to Graphical Touch UI disabled to prevent boot hangs
+            CRITICAL_ERROR=1
+            echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
         fi
     else
         echo -e "  [${YELLOW}WARN${NC}] 'zbar-tools' is not installed. Skipping camera scanner."
-        # Jump straight to Graphical fallback if no camera tools!
-        export DISPLAY=:0
-        if command -v zenity &> /dev/null; then
-            echo -e "  ${YELLOW}Launching Touch-Screen Wi-Fi Selection...${NC}"
-            networks=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
-            selected_ssid=$(echo "$networks" | zenity --list --title="Wi-Fi Setup" --text="Touch a network to connect:" --column="Available Networks" --width=600 --height=400 2>/dev/null)
-            if [ -n "$selected_ssid" ]; then
-                password=$(zenity --password --title="Wi-Fi Password" --text="Enter the password for $selected_ssid:" 2>/dev/null)
-                if [ -n "$password" ]; then
-                    sudo nmcli dev wifi connect "$selected_ssid" password "$password" &>/dev/null
-                else
-                    sudo nmcli dev wifi connect "$selected_ssid" &>/dev/null
-                fi
-                sleep 5
-                VERIFY2=$(curl -s -o /dev/null -w "%{http_code}" -m 4 http://clients3.google.com/generate_204 || echo "000")
-                if [ "$VERIFY2" == "204" ]; then
-                    echo -e "  [${GREEN}OK${NC}] Internet connected via Touch GUI!"
-                else
-                    CRITICAL_ERROR=1
-                fi
-            else
-                CRITICAL_ERROR=1
-            fi
-        else
-            CRITICAL_ERROR=1
-            echo -e "  [${RED}FAIL${NC}] Both QR Scanner and Touch GUI are unavailable."
-        fi
+        # Jump straight to Graphical fallback disabled to prevent boot hangs
+        CRITICAL_ERROR=1
+        echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
     fi
 fi
 
