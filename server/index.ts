@@ -119,7 +119,7 @@ async function initStorage() {
 initStorage();
 
 async function processSyncQueue() {
-    const cloudUrl = process.env.CLOUD_SERVER_URL || 'http://204.168.131.95:3001';
+    const cloudUrl = process.env.CLOUD_SERVER_URL || 'http://100.67.124.95:3001';
     try {
         const pendingUploads = db.prepare("SELECT * FROM uploads WHERE status = 'pending' ORDER BY created_at ASC").all() as any[];
         
