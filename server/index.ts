@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import { exec, spawn } from 'child_process';
 import util from 'util';
 import { GoogleGenAI } from '@google/genai';
@@ -13,6 +14,9 @@ import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import QRCode from 'qrcode';
 import thermal from './print';
 import sharp from 'sharp';
+import Database from 'better-sqlite3';
+import FormData from 'form-data';
+import axios from 'axios';
 
 const execPromise = util.promisify(exec);
 
@@ -206,67 +210,67 @@ app.get('*', (req, res, next) => {
 const PORT = process.env.PORT || 3001;
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'portraits');
 const SPOOL_DIR = path.join(process.cwd(), 'public', 'spool');
-const QUEUE_DIR = path.join(SPOOL_DIR, 'sync_queue');
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'MISSING_KEY' });
 
+let db: Database.Database;
+
 async function initStorage() {
-    [UPLOADS_DIR, SPOOL_DIR, QUEUE_DIR].forEach(async dir => {
+    for (const dir of [UPLOADS_DIR, SPOOL_DIR]) {
         try { await fs.access(dir); } catch { await fs.mkdir(dir, { recursive: true }); }
-    });
+    }
+    
+    db = new Database(path.join(SPOOL_DIR, 'sync_queue.db'));
+    db.pragma('journal_mode = WAL');
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+    `);
 }
 initStorage();
 
 async function processSyncQueue() {
     const cloudUrl = process.env.CLOUD_SERVER_URL || 'http://204.168.131.95:3001';
     try {
-        const files = await fs.readdir(QUEUE_DIR);
-        const now = Date.now();
-        for (const file of files) {
-            if (!file.endsWith('.jpg') && !file.endsWith('.png')) continue;
+        const pendingUploads = db.prepare("SELECT * FROM uploads WHERE status = 'pending' ORDER BY created_at ASC").all() as any[];
+        
+        for (const upload of pendingUploads) {
+            const { id, file_path } = upload;
             
-            const filePath = path.join(QUEUE_DIR, file);
-            const stats = await fs.stat(filePath);
-            
-            // Clear out any old ghost files stuck in the queue!
-            // We aggressively purge anything older than 5 minutes to instantly drop the backlog of old, identical frozen frames from earlier testing that are currently clogging the upload pipe to Nanobanana!
-            if (now - stats.mtimeMs > 5 * 60 * 1000) {
-                console.log(`🧹 Deleting old stuck file from queue: ${file}`);
-                await fs.unlink(filePath).catch(() => {});
+            let fileExists = true;
+            try { await fs.access(file_path); } catch { fileExists = false; }
+            if (!fileExists) {
+                db.prepare("UPDATE uploads SET status = 'missing' WHERE id = ?").run(id);
                 continue;
             }
 
-            const imageBuffer = await fs.readFile(filePath);
+            console.log(`☁️ Background worker streaming ${path.basename(file_path)} to cloud orchestrator at ${cloudUrl}...`);
             
-            console.log(`☁️ Background worker syncing ${file} to cloud orchestrator at ${cloudUrl}...`);
-            const formData = new FormData();
-            // Convert Node Buffer to an ArrayBuffer so native fetch/FormData polyfills serialize it correctly
-            const arrayBuffer = new Uint8Array(imageBuffer).buffer;
-            const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
-            formData.append('image', blob, 'capture.jpg');
+            const form = new FormData();
+            // Best Practice: Stream the file directly from disk using fsSync.createReadStream
+            form.append('image', fsSync.createReadStream(file_path));
 
-            const headers: Record<string, string> = {};
+            const headers: Record<string, string> = form.getHeaders();
             if (process.env.BOOTH_SECRET) {
                 headers['Authorization'] = `Bearer ${process.env.BOOTH_SECRET}`;
             }
 
-            const res = await fetch(`${cloudUrl}/api/process`, {
-                method: 'POST',
-                headers,
-                body: formData
-            });
-            
-            if (res.ok) {
-                console.log(`✅ Background sync successful for ${file}. Removing from queue.`);
-                try {
-                    await fs.unlink(filePath);
-                } catch (unlinkErr) {
-                    console.error(`❌ CRITICAL: Failed to delete ${file} after sync:`, (unlinkErr as Error).message);
-                    // We must rename it so we don't keep uploading it forever!
-                    await import('fs/promises').then(fs => fs.rename(filePath, `${filePath}.stuck`).catch(() => {}));
+            try {
+                const res = await axios.post(`${cloudUrl}/api/process`, form, { headers });
+                if (res.status === 200) {
+                    console.log(`✅ Background sync successful for ${path.basename(file_path)}. Marking as done.`);
+                    db.prepare("UPDATE uploads SET status = 'done' WHERE id = ?").run(id);
+                    
+                    // We can safely try to delete the local queue copy, but if it fails, it's fine! 
+                    // The DB state prevents infinite loops.
+                    try { await fs.unlink(file_path); } catch(e) {}
                 }
-            } else {
-                console.log(`⚠️ Background sync failed for ${file} (HTTP ${res.status}). Will retry later.`);
+            } catch (err: any) {
+                console.log(`⚠️ Background sync failed for ${path.basename(file_path)} (HTTP ${err.response?.status || err.message}). Will retry later.`);
             }
         }
     } catch (e) {
@@ -366,8 +370,13 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
 
     // Queue raw image for background sync (so Cloud can process it independently for the mosaic)
     if (!skipSync) {
-        const queuePath = path.join(QUEUE_DIR, `raw-${portraitId}.jpg`);
-        await fs.writeFile(queuePath, imageBuffer).catch(e => console.error('❌ Failed to queue image:', e));
+        const queuePath = path.join(SPOOL_DIR, `raw-${portraitId}.jpg`);
+        try {
+            await fs.writeFile(queuePath, imageBuffer);
+            db.prepare("INSERT INTO uploads (file_path, status, created_at) VALUES (?, 'pending', ?)").run(queuePath, Date.now());
+        } catch (e) {
+            console.error('❌ Failed to queue image:', (e as Error).message);
+        }
     }
 
     let julesSessionId: string | undefined;
