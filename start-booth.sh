@@ -218,4 +218,4 @@ fi
 # Best Practice: 'wait -n' waits for ANY of the background processes to exit.
 # This means if Chromium, the backend, OR the frontend crashes, the entire script cleanly exits.
 # If wrapped in an OS service (like systemd), this ensures the whole booth automatically restarts instantly!
-wait -n $SERVER_PID $CHROMIUM_PID
+wait -n $SERVER_PID $CHROMIUM_PID $PYTHON_PID
