@@ -13,3 +13,23 @@ jules.ink/
 test-jules.js
 .idea/
 test_output/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Local Test & Scratch Files
+test_*.mjs
+test_*.js
+test-*.mjs
+test-*.js
+test*.jpg
+test*.txt
+output.jpg
+test_boundary_out.jpg
+test_ffmpeg.jpg
+test_mjpeg_out.jpg
+scratch_test/
+patch_*.mjs
+check_*.mjs
+original_index.ts

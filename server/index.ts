@@ -271,9 +271,16 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
 
     let julesSessionId: string | undefined;
     if (process.env.BOOTH_ROLE === 'cloud' && process.env.JULES_API_KEY) {
+        // Construct the full public URL so Jules can fetch the image over the network
+        // The VPS Express app handles serving the public/portraits folder directly
+        const vpsDomain = process.env.VPS_DOMAIN || process.env.CLOUD_SERVER_URL || `http://100.67.124.95:${PORT}`;
+        // Ensure vpsDomain does not have a trailing slash
+        const cleanVpsDomain = vpsDomain.replace(/\/$/, '');
+        const fullImageUrl = `${cleanVpsDomain}${publicUrl}`;
+
         // Fire-and-forget Jules session - never block the critical path
         jules.session({
-            prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required. Portrait ID: ${portraitId}`,
+            prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required. Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}`,
             source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
             autoPr: true,
         }).then(session => {
