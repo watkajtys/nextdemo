@@ -162,6 +162,9 @@ class CameraManager {
             // Clear the previous frame from memory so we guarantee we only capture a fresh, live frame
             // that arrives AFTER the user pressed the button!
             this.latestFrame = null;
+            // CRITICAL FIX: We MUST clear the rolling frame buffer as well! 
+            // Otherwise, Node.js will just parse the next oldest frame that was sitting in memory during the 3-second countdown.
+            this.frameBuffer = Buffer.alloc(0);
 
             // If the stream isn't running, start it
             if (!this.latestFrame) {
