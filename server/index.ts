@@ -109,6 +109,7 @@ async function initStorage() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS uploads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            portrait_id TEXT,
             file_path TEXT NOT NULL,
             status TEXT NOT NULL,
             created_at INTEGER NOT NULL
@@ -123,7 +124,7 @@ async function processSyncQueue() {
         const pendingUploads = db.prepare("SELECT * FROM uploads WHERE status = 'pending' ORDER BY created_at ASC").all() as any[];
         
         for (const upload of pendingUploads) {
-            const { id, file_path } = upload;
+            const { id, file_path, portrait_id } = upload;
             
             let fileExists = true;
             try { await fs.access(file_path); } catch { fileExists = false; }
@@ -137,6 +138,9 @@ async function processSyncQueue() {
             const form = new FormData();
             // Best Practice: Stream the file directly from disk using fsSync.createReadStream
             form.append('image', fsSync.createReadStream(file_path));
+            if (portrait_id) {
+                form.append('portraitId', portrait_id);
+            }
 
             const headers: Record<string, string> = form.getHeaders();
             if (process.env.BOOTH_SECRET) {
@@ -196,7 +200,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
 
     let finalImageToThreshold = imageBuffer;
 
-    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
+    if (process.env.BOOTH_ROLE !== 'cloud' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local edge Gemini stylization...');
             
@@ -223,28 +227,30 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         } catch (e) { console.error('🎨 Gemini failed:', (e as Error).message); }
     }
 
-    try {
-        // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
-        // This runs on either the stylized Gemini output OR the raw camera fallback!
-        // This guarantees the thermal printer NEVER receives a grayscale or color JPEG, which crashes it.
-        const img = await loadImage(finalImageToThreshold);
-        const canvas = createCanvas(img.width, img.height);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        for (let i = 0; i < data.length; i += 4) {
-            const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
-            const val = brightness > 128 ? 255 : 0;
-            data[i] = data[i+1] = data[i+2] = val;
+    if (process.env.BOOTH_ROLE !== 'cloud') {
+        try {
+            // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
+            // This runs on either the stylized Gemini output OR the raw camera fallback!
+            // This guarantees the thermal printer NEVER receives a grayscale or color JPEG, which crashes it.
+            const img = await loadImage(finalImageToThreshold);
+            const canvas = createCanvas(img.width, img.height);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                const val = brightness > 128 ? 255 : 0;
+                data[i] = data[i+1] = data[i+2] = val;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            stylizedBuffer = canvas.toBuffer('image/png');
+            fileExt = 'png';
+            console.log('🖤 1-Bit Thresholding successful');
+        } catch (e) {
+            console.error('🖤 Thresholding failed:', (e as Error).message);
         }
-        ctx.putImageData(imageData, 0, 0);
-        stylizedBuffer = canvas.toBuffer('image/png');
-        fileExt = 'png';
-        console.log('🖤 1-Bit Thresholding successful');
-    } catch (e) {
-        console.error('🖤 Thresholding failed:', (e as Error).message);
     }
 
     const imageFileName = `${portraitId}.${fileExt}`;
@@ -257,17 +263,17 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         const queuePath = path.join(SPOOL_DIR, `raw-${portraitId}.jpg`);
         try {
             await fs.writeFile(queuePath, imageBuffer);
-            db.prepare("INSERT INTO uploads (file_path, status, created_at) VALUES (?, 'pending', ?)").run(queuePath, Date.now());
+            db.prepare("INSERT INTO uploads (file_path, portrait_id, status, created_at) VALUES (?, ?, 'pending', ?)").run(queuePath, portraitId, Date.now());
         } catch (e) {
             console.error('❌ Failed to queue image:', (e as Error).message);
         }
     }
 
     let julesSessionId: string | undefined;
-    if (process.env.JULES_API_KEY) {
+    if (process.env.BOOTH_ROLE === 'cloud' && process.env.JULES_API_KEY) {
         // Fire-and-forget Jules session - never block the critical path
         jules.session({
-            prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required.`,
+            prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required. Portrait ID: ${portraitId}`,
             source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
             autoPr: true,
         }).then(session => {
@@ -276,7 +282,9 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
     }
 
-    triggerPrint(publicUrl, portraitId, julesSessionId).catch(console.error);
+    if (process.env.BOOTH_ROLE !== 'cloud') {
+        triggerPrint(publicUrl, portraitId, julesSessionId).catch(console.error);
+    }
 
     return { publicUrl, imageUrl: publicUrl, portraitId, julesSessionId };
 }
@@ -326,7 +334,8 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
 app.post('/api/process', requireSecret, upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
     try {
-        const result = await processImage(req.file.buffer, undefined, true);
+        const portraitId = req.body.portraitId;
+        const result = await processImage(req.file.buffer, portraitId, true);
         res.status(200).json({ printData: result });
     } catch (e) {
         res.status(500).json({ error: (e as Error).message });
