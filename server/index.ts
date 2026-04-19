@@ -405,7 +405,21 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, 1200, 1800);
         const portraitImg = await loadImage(buffer);
-        ctx.drawImage(portraitImg, 0, 0, 1200, 1200);
+        
+        // Preserve aspect ratio by cropping the center (object-fit: cover)
+        const targetAspectRatio = 1.0; // 1200 / 1200
+        const imgAspectRatio = portraitImg.width / portraitImg.height;
+        
+        let sx = 0, sy = 0, sWidth = portraitImg.width, sHeight = portraitImg.height;
+        if (imgAspectRatio > targetAspectRatio) {
+            sWidth = portraitImg.height * targetAspectRatio;
+            sx = (portraitImg.width - sWidth) / 2;
+        } else {
+            sHeight = portraitImg.width / targetAspectRatio;
+            sy = (portraitImg.height - sHeight) / 2;
+        }
+        
+        ctx.drawImage(portraitImg, sx, sy, sWidth, sHeight, 0, 0, 1200, 1200);
         const qrBuffer = await QRCode.toBuffer(`https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`);
         const qrImg = await loadImage(qrBuffer);
         ctx.drawImage(qrImg, 50, 1250, 500, 500);
