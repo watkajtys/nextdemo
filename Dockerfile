@@ -10,6 +10,9 @@ RUN npm install
 
 COPY . .
 
+# Build the frontend static assets
+RUN npm run build
+
 # Ensure public/portraits folder exists so fs.writeFile doesn't crash
 RUN mkdir -p public/portraits
 

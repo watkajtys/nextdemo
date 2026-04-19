@@ -86,11 +86,24 @@ if [ "$LOCAL" != "$REMOTE" ] && [ "$REMOTE" != "remote_empty" ]; then
                 npm install --no-audit
             fi
         fi
+        
+        echo "🏗️ Building frontend..."
+        npm run build || true
     else
          echo "⏩ No dependency changes detected. Skipping npm update for a fast boot!"
+         # Fallback in case the dist folder is missing (e.g. fresh clone)
+         if [ ! -d "dist" ]; then
+             echo "🏗️ Missing dist folder detected. Building frontend..."
+             npm run build || true
+         fi
     fi
 else
     echo "⏩ Code is completely up to date. Fast Boot Enabled."
+    # Fallback in case the dist folder is missing (e.g. fresh clone)
+    if [ ! -d "dist" ]; then
+        echo "🏗️ Missing dist folder detected. Building frontend..."
+        npm run build || true
+    fi
 fi
 
 echo "🔑 Checking for configuration..."
