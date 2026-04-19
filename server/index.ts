@@ -64,7 +64,7 @@ class CameraManager {
             throw new Error(`Camera service error: ${res.statusText}`);
         }
         const buffer = Buffer.from(await res.arrayBuffer());
-        await import('fs/promises').then(fs => fs.writeFile(filePath, buffer));
+        await fs.writeFile(filePath, buffer);
         console.log(`✅ Captured pristine frame via Python microservice (${buffer.length} bytes)`);
     }
 }
@@ -202,7 +202,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
             
             // --- EDGE COMPRESSION ---
             const compressedBuffer = await sharp(imageBuffer)
-                .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+                .resize({ width: 1024, height: 1024, fit: 'cover', withoutEnlargement: true })
                 .jpeg({ quality: 80 })
                 .toBuffer();
 
