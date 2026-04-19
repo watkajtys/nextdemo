@@ -19,6 +19,7 @@ echo "🧹 Cleaning up old processes..."
 pkill -f "chromium" || true
 pkill -f "server/index.ts" || true
 pkill -f "unclutter" || true
+pkill -f "camera_service.py" || true
 
 # Bulletproof: Define trap EARLY so if the script fails during startup, we still clean up!
 # Best Practice: Use a dedicated cleanup function with set +e inside it.
@@ -27,8 +28,8 @@ pkill -f "unclutter" || true
 cleanup() {
     set +e
     echo "🛑 Shutting down Photobooth..."
-    kill $SERVER_PID $UNCLUTTER_PID $CHROMIUM_PID 2>/dev/null
-    wait $SERVER_PID $CHROMIUM_PID 2>/dev/null
+    kill $SERVER_PID $UNCLUTTER_PID $CHROMIUM_PID $PYTHON_PID 2>/dev/null
+    wait $SERVER_PID $CHROMIUM_PID $PYTHON_PID 2>/dev/null
     echo "👋 Photobooth stopped."
 }
 trap cleanup SIGINT SIGTERM EXIT
@@ -128,7 +129,18 @@ if command -v unclutter &> /dev/null; then
     UNCLUTTER_PID=$!
 fi
 
-echo "🚀 Starting servers..."
+echo "🐍 Starting Python Picamera2 Microservice..."
+# Ensure flask is installed (picamera2 is preinstalled on Pi 5 OS)
+if ! python3 -c "import flask" &> /dev/null; then
+    echo "📦 Installing Flask for Python microservice..."
+    # Use --break-system-packages if on newer Debian versions that enforce PEP 668, as this is a single-purpose kiosk
+    pip install flask --break-system-packages || pip install flask
+fi
+
+python3 scripts/camera_service.py > python_camera.log 2>&1 &
+PYTHON_PID=$!
+
+echo "🚀 Starting Node backend server..."
 
 # Start the Node/Express backend in the background
 # In production, this server now also serves the static files from /dist

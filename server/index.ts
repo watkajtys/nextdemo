@@ -57,138 +57,15 @@ setInterval(() => {
  * This class ONLY handles high-res capture.
  */
 class CameraManager {
-    private isCapturing = false;
-    private previewProcess: import('child_process').ChildProcess | null = null;
-    private clients: Set<import('express').Response> = new Set();
-    private latestFrame: Buffer | null = null;
-    private frameBuffer: Buffer = Buffer.alloc(0);
-
-    startPreview(res?: import('express').Response) {
-        if (this.isCapturing && res) {
-            res.status(503).send('Camera is busy capturing');
-            return;
-        }
-
-        if (res) {
-            this.clients.add(res);
-            res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
-        }
-
-        if (!this.previewProcess) {
-            console.log('🎥 Spawning singleton MJPEG stream at 1080x1080 (Zero-Shutter-Lag Mode)...');
-            // We use ffmpeg at full 1080p resolution and NEVER stop it!
-            // This prevents the Pi 5 V4L2 hardware from freezing and ensures AGC/AWB are perfectly converged.
-            const ffmpeg = spawn('ffmpeg', [
-                '-f', 'v4l2',
-                '-input_format', 'mjpeg',
-                '-video_size', '1920x1080',
-                '-i', '/dev/video0',
-                '-vf', 'crop=in_h:in_h,scale=1080:1080',
-                '-f', 'mpjpeg',
-                '-q:v', '2', // High quality for the captures
-                '-boundary_tag', 'frame',
-                'pipe:1'
-            ]);
-            this.previewProcess = ffmpeg;
-
-            ffmpeg.stdout?.on('data', (data) => {
-                // Stream to all connected browser clients
-                for (const client of this.clients) {
-                    client.write(data);
-                }
-
-                // Append to our rolling frame buffer
-                this.frameBuffer = Buffer.concat([this.frameBuffer, data]);
-                
-                // Parse the MJPEG stream using boundary tags to avoid extracting embedded EXIF thumbnails!
-                // Arducam/V4L2 may inject stale thumbnails, so we MUST extract the entire frame payload.
-                let boundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'));
-                while (boundaryIdx !== -1) {
-                    const nextBoundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'), boundaryIdx + 7);
-                    if (nextBoundaryIdx !== -1) {
-                        // Extract everything between the two boundaries
-                        const chunk = this.frameBuffer.subarray(boundaryIdx, nextBoundaryIdx);
-                        // Find the start of the JPEG data (after the HTTP headers)
-                        const jpegStart = chunk.indexOf(Buffer.from([0xFF, 0xD8]));
-                        if (jpegStart !== -1) {
-                            // Copy the entire true JPEG payload
-                            this.latestFrame = Buffer.from(chunk.subarray(jpegStart));
-                        }
-                        this.frameBuffer = this.frameBuffer.subarray(nextBoundaryIdx);
-                        boundaryIdx = this.frameBuffer.indexOf(Buffer.from('--frame'));
-                    } else {
-                        // Keep the remaining buffer and wait for the next boundary
-                        if (boundaryIdx > 0) {
-                            this.frameBuffer = Buffer.from(this.frameBuffer.subarray(boundaryIdx));
-                        }
-                        break;
-                    }
-                }
-                // Safety valve to prevent unbounded memory growth if the stream corrupts
-                if (this.frameBuffer.length > 10000000) {
-                    this.frameBuffer = Buffer.alloc(0);
-                }
-            });
-
-            ffmpeg.on('exit', (code) => {
-                console.log(`🎥 ffmpeg exited with code ${code}`);
-                this.previewProcess = null;
-                for (const client of this.clients) {
-                    client.end();
-                }
-                this.clients.clear();
-                
-                // Auto-restart stream if it crashes, keeping the camera alive!
-                setTimeout(() => this.startPreview(), 2000);
-            });
-        }
-
-        res?.on('close', () => {
-            this.clients.delete(res);
-            // WE NO LONGER KILL THE PREVIEW STREAM!
-            // By leaving it running, we eliminate the 1200ms startup delay, 
-            // completely prevent the V4L2 stale-frame freeze bug, 
-            // and guarantee instantaneous photo captures.
-        });
-    }
-
     async captureImage(filePath: string): Promise<void> {
-        if (this.isCapturing) throw new Error('Already capturing');
-        this.isCapturing = true;
-        
-        try {
-            console.log(`📸 Arducam Zero-Shutter-Lag Capture...`);
-            
-            // Clear the previous frame from memory so we guarantee we only capture a fresh, live frame
-            // that arrives AFTER the user pressed the button!
-            this.latestFrame = null;
-            // CRITICAL FIX: We MUST clear the rolling frame buffer as well! 
-            // Otherwise, Node.js will just parse the next oldest frame that was sitting in memory during the 3-second countdown.
-            this.frameBuffer = Buffer.alloc(0);
-
-            // If the stream isn't running, start it
-            if (!this.latestFrame) {
-                this.startPreview();
-            }
-
-            // Wait up to 5 seconds for a clean frame to arrive in the pipeline
-            for (let i = 0; i < 50; i++) {
-                if (this.latestFrame) break;
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            if (!this.latestFrame) throw new Error('Camera stream failed to produce a frame');
-            
-            // Instantly save the exact frame the user just saw on the screen!
-            await fs.writeFile(filePath, this.latestFrame!);
-            
-            const stats = await fs.stat(filePath);
-            if (stats.size < 1000) throw new Error('Captured file is too small');
-            
-            console.log(`✅ Captured fresh 1080x1080 frame (${stats.size} bytes)`);
-        } finally {
-            this.isCapturing = false;
+        console.log(`📸 Requesting Python Picamera2 native capture...`);
+        const res = await fetch('http://127.0.0.1:5000/capture', { method: 'POST' });
+        if (!res.ok) {
+            throw new Error(`Camera service error: ${res.statusText}`);
         }
+        const buffer = Buffer.from(await res.arrayBuffer());
+        await import('fs/promises').then(fs => fs.writeFile(filePath, buffer));
+        console.log(`✅ Captured pristine frame via Python microservice (${buffer.length} bytes)`);
     }
 }
 
@@ -404,7 +281,21 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
     return { publicUrl, imageUrl: publicUrl, portraitId, julesSessionId };
 }
 
-app.get('/api/preview', (req, res) => cameraManager.startPreview(res));
+import http from 'http';
+
+app.get('/api/preview', (req, res) => {
+    const proxyReq = http.request('http://127.0.0.1:5000/preview', (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+    });
+    proxyReq.on('error', () => {
+        res.status(502).send('Camera service unavailable');
+    });
+    req.on('close', () => {
+        proxyReq.destroy();
+    });
+    proxyReq.end();
+});
 
 const upload = multer({ 
     storage: multer.memoryStorage(),
