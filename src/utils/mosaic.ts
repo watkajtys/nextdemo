@@ -30,6 +30,16 @@ export const SVG_SCALE = (620 / 134) * (GRID_WORLD_SIZE / 800);
 export const SVG_WORLD_W = 124.6 * SVG_SCALE;
 export const SVG_WORLD_H = 134 * SVG_SCALE;
 
+// Simple deterministic PRNG (Mulberry32)
+export function mulberry32(a: number) {
+    return function() {
+      var t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
 // We export a pure function to initialize the grid instead of using global state
 export function getInitialBaseCells(): Cell[] {
     const emptyBaseCells: Cell[] = [];
@@ -91,8 +101,13 @@ export function getInitialBaseCells(): Cell[] {
         }
     }
     
-    // Shuffle cells to randomize appearance
-    emptyBaseCells.sort(() => Math.random() - 0.5);
+    // Deterministic Seeded Shuffle
+    const prng = mulberry32(1337);
+    for (let i = emptyBaseCells.length - 1; i > 0; i--) {
+        const j = Math.floor(prng() * (i + 1));
+        [emptyBaseCells[i], emptyBaseCells[j]] = [emptyBaseCells[j], emptyBaseCells[i]];
+    }
+    
     return emptyBaseCells;
 }
 
@@ -303,8 +318,8 @@ export function easeOutCubic(t: number): number {
     return 1 - Math.pow(1 - t, 3);
 }
 
-// Pure function to handle Quadtree subdivision math
-export function subdivideCell(parent: Cell, targetHash: string, targetTime: string, targetColor: string): { targetCell: Cell, siblings: Cell[] } {
+// Pure function to handle Quadtree subdivision math using a deterministic seed
+export function subdivideCell(parent: Cell, targetHash: string, targetTime: string, targetColor: string, prngSeed: number): { targetCell: Cell, siblings: Cell[] } {
     const hw = parent.w / 2;
     const hh = parent.h / 2;
     const nextDepth = parent.depth + 1;
@@ -316,7 +331,8 @@ export function subdivideCell(parent: Cell, targetHash: string, targetTime: stri
         { x: parent.x + hw, y: parent.y + hh, w: hw, h: hh, depth: nextDepth, color: parent.color, hash: targetHash, time: targetTime }
     ];
 
-    const newUserIndex = Math.floor(Math.random() * 4);
+    const prng = mulberry32(prngSeed);
+    const newUserIndex = Math.floor(prng() * 4);
     const targetCell = quadrants[newUserIndex];
     targetCell.color = targetColor;
 

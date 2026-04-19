@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMosaicStore } from '../store/useMosaicStore';
-import { Cell, MAX_DEPTH, subdivideCell, getRandomNeonColor } from '../utils/mosaic';
+import { Cell, MAX_DEPTH, subdivideCell, getRandomNeonColor, mulberry32 } from '../utils/mosaic';
 
 // Helper: load an image from URL and return the HTMLImageElement once ready
 function preloadImage(url: string): Promise<HTMLImageElement> {
@@ -80,6 +80,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
         const hash = customHash || Math.random().toString(16).substring(2, 9);
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newColor = getRandomNeonColor();
+        const currentCount = useMosaicStore.getState().userCount;
 
         const emptyCell = popEmptyBaseCell();
         if (emptyCell) {
@@ -95,13 +96,15 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
             const minDepth = Math.min(...allSubdividable.map(c => c.depth));
             const priorityCells = allSubdividable.filter(c => c.depth === minDepth);
-            const parentIndex = Math.floor(Math.random() * priorityCells.length);
+            
+            const prng = mulberry32(1337 + currentCount);
+            const parentIndex = Math.floor(prng() * priorityCells.length);
             const parent = priorityCells[parentIndex];
 
             // We must remove the parent cell from active state immediately before animating
             useMosaicStore.getState().removeActiveCell(parent);
 
-            const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
+            const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor, 1337 + currentCount);
             if (customImageUrl) targetCell.imageUrl = customImageUrl;
             if (julesSessionId) targetCell.julesSessionId = julesSessionId;
 
@@ -210,6 +213,7 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             const hash = Math.random().toString(16).substring(2, 9);
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const newColor = getRandomNeonColor();
+            const currentCount = useMosaicStore.getState().userCount;
 
             const emptyCell = popEmptyBaseCell();
             if (emptyCell) {
@@ -220,11 +224,13 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
 
                 const minDepth = Math.min(...allSubdividable.map(c => c.depth));
                 const priorityCells = allSubdividable.filter(c => c.depth === minDepth);
-                const parent = priorityCells[Math.floor(Math.random() * priorityCells.length)];
+                
+                const prng = mulberry32(1337 + currentCount);
+                const parent = priorityCells[Math.floor(prng() * priorityCells.length)];
 
                 useMosaicStore.getState().removeActiveCell(parent);
 
-                const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor);
+                const { targetCell, siblings } = subdivideCell(parent, hash, time, newColor, 1337 + currentCount);
                 targetCell.flash = 0.8;
 
                 useMosaicStore.getState().addBulkActiveCells([...siblings.map(s => ({ ...s, flash: 0.5 })), targetCell]);
