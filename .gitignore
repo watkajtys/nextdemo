@@ -11,3 +11,5 @@ public/portraits/
 .jules/
 jules.ink/
 test-jules.js
+.idea/
+test_output/
