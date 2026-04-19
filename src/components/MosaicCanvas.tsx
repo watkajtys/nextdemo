@@ -172,8 +172,33 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             }
 
             for (const cell of normalCells) {
-                ctx.fillStyle = cell.color || '#fff';
-                ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+                const cachedImg = state.imageCache[cell.hash || ''];
+                
+                if (cachedImg) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(cell.x, cell.y, cell.w, cell.h);
+                    ctx.clip();
+                    
+                    const aspectRatio = cachedImg.width / cachedImg.height;
+                    let drawW = cell.w;
+                    let drawH = cell.h;
+                    let drawX = cell.x;
+                    let drawY = cell.y;
+
+                    if (aspectRatio > 1) {
+                        drawW = cell.h * aspectRatio;
+                        drawX = cell.x - (drawW - cell.w) / 2;
+                    } else if (aspectRatio < 1) {
+                        drawH = cell.w / aspectRatio;
+                        drawY = cell.y - (drawH - cell.h) / 2;
+                    }
+                    ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = cell.color || '#fff';
+                    ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+                }
 
                 if (cell.flash && cell.flash > 0) {
                     ctx.fillStyle = `rgba(255, 255, 255, ${cell.flash})`;
