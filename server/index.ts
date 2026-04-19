@@ -151,6 +151,10 @@ class CameraManager {
         try {
             console.log(`📸 Arducam Zero-Shutter-Lag Capture...`);
             
+            // Clear the previous frame from memory so we guarantee we only capture a fresh, live frame
+            // that arrives AFTER the user pressed the button!
+            this.latestFrame = null;
+
             // If the stream isn't running, start it
             if (!this.latestFrame) {
                 this.startPreview();
@@ -254,7 +258,13 @@ async function processSyncQueue() {
             
             if (res.ok) {
                 console.log(`✅ Background sync successful for ${file}. Removing from queue.`);
-                await fs.unlink(filePath);
+                try {
+                    await fs.unlink(filePath);
+                } catch (unlinkErr) {
+                    console.error(`❌ CRITICAL: Failed to delete ${file} after sync:`, (unlinkErr as Error).message);
+                    // We must rename it so we don't keep uploading it forever!
+                    await import('fs/promises').then(fs => fs.rename(filePath, `${filePath}.stuck`).catch(() => {}));
+                }
             } else {
                 console.log(`⚠️ Background sync failed for ${file} (HTTP ${res.status}). Will retry later.`);
             }
