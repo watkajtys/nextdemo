@@ -301,7 +301,14 @@ if [ "$CRITICAL_ERROR" -eq 0 ]; then
     echo -e "${GREEN}✅ All critical checks passed! Pi is healthy.${NC}"
 else
     echo -e "${RED}❌ Some critical checks failed. Please review the output above.${NC}"
-    echo -e "${YELLOW}Waiting 5 seconds before attempting to continue...${NC}"
-    sleep 5
+    
+    # NEW: Display a graphical error if Zenity is available so staff can see it on the physical screen
+    if command -v zenity &> /dev/null; then
+        export DISPLAY=:0
+        zenity --error --title="Kiosk Boot Failure" --text="Critical hardware or configuration error detected during boot.\n\nPlease check the logs via SSH or review the console output.\n\nERROR SUMMARY:\n- See console for details." --timeout=30 &
+    fi
+
+    echo -e "${YELLOW}Waiting 10 seconds before attempting to continue...${NC}"
+    sleep 10
 fi
 echo -e "${BLUE}======================================${NC}\n"
