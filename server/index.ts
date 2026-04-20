@@ -57,15 +57,15 @@ setInterval(() => {
  * This class ONLY handles high-res capture.
  */
 class CameraManager {
-    async captureImage(filePath: string): Promise<void> {
+    async captureImage(): Promise<Buffer> {
         console.log(`📸 Requesting Python Picamera2 native capture...`);
         const res = await fetch('http://127.0.0.1:5000/capture', { method: 'POST' });
         if (!res.ok) {
             throw new Error(`Camera service error: ${res.statusText}`);
         }
         const buffer = Buffer.from(await res.arrayBuffer());
-        await fs.writeFile(filePath, buffer);
         console.log(`✅ Captured pristine frame via Python microservice (${buffer.length} bytes)`);
+        return buffer;
     }
 }
 

@@ -118,8 +118,19 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
                 }
             }
 
-            await new Promise((resolve, reject) => {                img.onload = resolve;
-                img.onerror = reject;
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = () => {
+                    // Fallback: If a local Pi 404s (e.g., trying to load a photo taken by a *different* booth that exists in the Git JSON but not locally),
+                    // dynamically rewrite the URL to fetch it securely from the Cloud VPS Tailscale Funnel instead!
+                    const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
+                    if (!img.src.startsWith(vpsDomain)) {
+                        console.warn(`[Mosaic] Local image missing (${id}). Falling back to Cloud VPS tunnel...`);
+                        img.src = `${vpsDomain}${url}`;
+                    } else {
+                        reject(new Error('Image failed to load from both local and cloud.'));
+                    }
+                };
                 img.src = safeUrl;
             });
 

@@ -90,14 +90,13 @@ export default function thermal() {
     );
 
     if (bad) {
-      // Clear the backlog of old stuck jobs before unpausing,
-      // so it doesn't print photos from hours ago!
-      await run(`cancel -a "${name}"`).catch(() => {});
+      // Re-enable the printer queue.
+      // We no longer cancel jobs here to avoid dropping valid jobs if the printer only temporarily ran out of paper.
       await Promise.all([
         run(`cupsenable "${name}"`),
         run(`cupsaccept "${name}"`),
       ]);
-      console.log(`✨ healed and cleared queue for: ${name}`);
+      console.log(`✨ healed printer state for: ${name}`);
     }
   };
 

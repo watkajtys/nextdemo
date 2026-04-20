@@ -10,19 +10,33 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
     const [status, setStatus] = useState<'pending' | 'ready'>('pending');
 
     useEffect(() => {
+        let timeoutId: NodeJS.Timeout;
+        let attempts = 0;
+        let isMounted = true;
+
         const checkGitHub = async () => {
+            if (!isMounted) return;
             try {
                 // Poll the raw github content to see if Jules merged the PR
-                const res = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json`, { cache: 'no-store' });
+                const res = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
                 if (res.ok) {
                     setStatus('ready');
                     setTimeout(onReady, 2000);
+                    return;
                 }
             } catch (e) {}
+
+            attempts++;
+            // Exponential backoff: start at 10s, cap at 30s
+            const nextInterval = Math.min(10000 * Math.pow(1.2, attempts), 30000);
+            timeoutId = setTimeout(checkGitHub, nextInterval);
         };
-        const interval = setInterval(checkGitHub, 5000);
+        
         checkGitHub();
-        return () => clearInterval(interval);
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, [portraitId, onReady]);
 
     return (
