@@ -33,6 +33,7 @@ interface Job {
     updatedAt: number;
 }
 const jobs = new Map<string, Job>();
+const portraitToJulesSession = new Map<string, string>();
 
 function updateJob(id: string, update: Partial<Job>) {
     const job = jobs.get(id) || { id, status: 'snapping', updatedAt: Date.now() };
@@ -148,14 +149,13 @@ async function processSyncQueue() {
             }
 
             try {
-                const res = await axios.post(`${cloudUrl}/api/process`, form, { headers });
+                const res = await axios.post(`${cloudUrl}/api/process`, form, { 
+                    headers,
+                    timeout: 15000 // 15-second timeout to prevent worker from hanging indefinitely
+                });
                 if (res.status === 200) {
                     console.log(`✅ Background sync successful for ${path.basename(file_path)}. Marking as done.`);
                     db.prepare("UPDATE uploads SET status = 'done' WHERE id = ?").run(id);
-                    
-                    // We can safely try to delete the local queue copy, but if it fails, it's fine! 
-                    // The DB state prevents infinite loops.
-                    try { await fs.unlink(file_path); } catch(e) {}
                 }
             } catch (err: any) {
                 console.log(`⚠️ Background sync failed for ${path.basename(file_path)} (HTTP ${err.response?.status || err.message}). Will retry later.`);
@@ -297,6 +297,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
             requireApproval: false,
         }).then(session => {
             console.log('🤖 Jules session started:', session.id);
+            portraitToJulesSession.set(portraitId, session.id);
             // Ideally we'd broadcast this session ID back to the client, but for now we just log it
         }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
     }
@@ -375,6 +376,20 @@ app.get('/api/job/:id', (req, res) => {
     res.status(200).json(job);
 });
 
+app.get('/api/portrait-status/:id', async (req, res) => {
+    const sessionId = portraitToJulesSession.get(req.params.id);
+    if (!sessionId) {
+        return res.status(404).json({ error: 'Session not found for portrait' });
+    }
+    try {
+        const session = jules.session(sessionId);
+        const info = await session.info();
+        res.json({ status: info.state });
+    } catch (e) {
+        res.status(500).json({ error: (e as Error).message });
+    }
+});
+
 app.post('/api/capture', requireSecret, async (req, res) => {
     const jobId = `job-${Date.now()}`;
     updateJob(jobId, { id: jobId, status: 'snapping' });
@@ -382,21 +397,16 @@ app.post('/api/capture', requireSecret, async (req, res) => {
 
     (async () => {
         try {
-            const rawFileName = `raw-${Date.now()}.jpg`;
-            const rawFilePath = path.join(UPLOADS_DIR, rawFileName);
-
-            await cameraManager.captureImage(rawFilePath);
+            const rawBuffer = await cameraManager.captureImage();
             updateJob(jobId, { status: 'processing' });
-            
-            const rawBuffer = await fs.readFile(rawFilePath);
+
             const result = await processImage(rawBuffer);
 
             updateJob(jobId, { status: 'completed', result });
         } catch (error) {
             updateJob(jobId, { status: 'failed', error: (error as Error).message });
         }
-    })();
-});
+    })();});
 
 app.get('/api/local-portraits', async (req, res) => {
     try {
@@ -439,14 +449,16 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         const jsonPath = path.join(SPOOL_DIR, `${portraitId}.json`);
         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: false }, null, 2));
 
-        const canvas = createCanvas(1200, 1800);
+        const printWidth = parseInt(process.env.PRINT_WIDTH || '1200', 10);
+        const printHeight = parseInt(process.env.PRINT_HEIGHT || '1800', 10);
+        const canvas = createCanvas(printWidth, printHeight);
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, 1200, 1800);
+        ctx.fillRect(0, 0, printWidth, printHeight);
         const portraitImg = await loadImage(buffer);
         
         // Preserve aspect ratio by cropping the center (object-fit: cover)
-        const targetAspectRatio = 1.0; // 1200 / 1200
+        const targetAspectRatio = 1.0; // printWidth / printWidth (Square)
         const imgAspectRatio = portraitImg.width / portraitImg.height;
         
         let sx = 0, sy = 0, sWidth = portraitImg.width, sHeight = portraitImg.height;
@@ -458,13 +470,19 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
             sy = (portraitImg.height - sHeight) / 2;
         }
         
-        ctx.drawImage(portraitImg, sx, sy, sWidth, sHeight, 0, 0, 1200, 1200);
+        ctx.drawImage(portraitImg, sx, sy, sWidth, sHeight, 0, 0, printWidth, printWidth);
         const qrBuffer = await QRCode.toBuffer(`https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`);
         const qrImg = await loadImage(qrBuffer);
-        ctx.drawImage(qrImg, 50, 1250, 500, 500);
+        
+        // Scale QR code and text dynamically based on print width
+        const qrSize = printWidth * 0.416; // 500/1200
+        const qrX = printWidth * 0.041;    // 50/1200
+        const qrY = printWidth + (printHeight - printWidth) * 0.083; // Relative to the bottom section
+        ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+        
         ctx.fillStyle = 'black';
-        ctx.font = 'bold 80px sans-serif';
-        ctx.fillText('NANO BANANA', 600, 1400);
+        ctx.font = `bold ${printWidth * 0.066}px sans-serif`; // 80/1200
+        ctx.fillText('NANO BANANA', printWidth * 0.5, printWidth + (printHeight - printWidth) * 0.33);
 
         const labelBuffer = canvas.toBuffer('image/png');
         setImmediate(async () => {
@@ -484,3 +502,4 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
+));

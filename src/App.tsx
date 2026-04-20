@@ -14,25 +14,43 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
         let attempts = 0;
         let isMounted = true;
 
-        const checkGitHub = async () => {
+        const checkStatus = async () => {
             if (!isMounted) return;
+            
+            let isReady = false;
             try {
-                // Poll the raw github content to see if Jules merged the PR
-                const res = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
-                if (res.ok) {
-                    setStatus('ready');
-                    setTimeout(onReady, 2000);
-                    return;
+                let apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
+                if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+                    apiBaseUrl = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
+                }
+
+                // Poll the real-time Jules SDK status on the VPS
+                const statusRes = await fetch(`${apiBaseUrl}/api/portrait-status/${portraitId}`);
+                if (statusRes.ok) {
+                    const data = await statusRes.json();
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        isReady = true;
+                    }
+                } else if (statusRes.status === 404) {
+                    // Fallback: If VPS has no memory of this session (e.g. an old scan or VPS restarted), check GitHub once
+                    const ghRes = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
+                    if (ghRes.ok) isReady = true;
                 }
             } catch (e) {}
 
+            if (isReady) {
+                setStatus('ready');
+                setTimeout(onReady, 2000);
+                return;
+            }
+
             attempts++;
-            // Exponential backoff: start at 10s, cap at 30s
-            const nextInterval = Math.min(10000 * Math.pow(1.2, attempts), 30000);
-            timeoutId = setTimeout(checkGitHub, nextInterval);
+            // Poll gently: start at 3s, cap at 10s
+            const nextInterval = Math.min(3000 * Math.pow(1.2, attempts), 10000);
+            timeoutId = setTimeout(checkStatus, nextInterval);
         };
         
-        checkGitHub();
+        checkStatus();
         return () => {
             isMounted = false;
             clearTimeout(timeoutId);
