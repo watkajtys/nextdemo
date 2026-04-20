@@ -470,7 +470,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (interactionRef.current.isPointerDown) {
             const dx = pos.screenX - interactionRef.current.dragStart.x;
             const dy = pos.screenY - interactionRef.current.dragStart.y;
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) interactionRef.current.pointerMoved = true;
+            // Increased jitter tolerance to 15px for touchscreen kiosks
+            if (Math.abs(dx) > 15 || Math.abs(dy) > 15) interactionRef.current.pointerMoved = true;
 
             cameraRef.current.x = interactionRef.current.cameraStart.x - dx / cameraRef.current.zoom;
             cameraRef.current.y = interactionRef.current.cameraStart.y - dy / cameraRef.current.zoom;
@@ -504,8 +505,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
     const handlePointerLeave = () => {
         interactionRef.current.isPointerDown = false;
-        clickedCellRef.current = null;
-        setOpenedCell(null);
+        // Do NOT reset clickedCellRef or openedCell here! 
+        // On touchscreens, lifting your finger triggers pointerleave, which would instantly close the modal.
         mouseRef.current.x = -1000;
         mouseRef.current.y = -1000;
     };
