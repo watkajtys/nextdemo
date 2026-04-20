@@ -326,7 +326,10 @@ app.get('/api/preview', (req, res) => {
 });
 
 const upload = multer({ 
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, SPOOL_DIR),
+        filename: (req, file, cb) => cb(null, `tmp-upload-${Date.now()}`)
+    }),
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
@@ -394,6 +397,25 @@ app.post('/api/capture', requireSecret, async (req, res) => {
             updateJob(jobId, { status: 'failed', error: (error as Error).message });
         }
     })();
+});
+
+app.get('/api/local-portraits', async (req, res) => {
+    try {
+        const files = await fs.readdir(SPOOL_DIR);
+        const jsonFiles = files.filter(f => f.endsWith('.json'));
+        const portraits = [];
+        for (const file of jsonFiles) {
+            try {
+                const content = await fs.readFile(path.join(SPOOL_DIR, file), 'utf-8');
+                portraits.push(JSON.parse(content));
+            } catch (e) {
+                // Ignore parse errors on individual files
+            }
+        }
+        res.json(portraits);
+    } catch (e) {
+        res.status(500).json({ error: (e as Error).message });
+    }
 });
 
 app.post('/api/save-for-print', requireSecret, async (req, res) => {

@@ -62,9 +62,14 @@ function MainLayout() {
         const livePortraits = getLivePortraits();
         
         const activeToRestore: Cell[] = [];
-        for (let i = 0; i < livePortraits.length; i++) {
-             let payload = livePortraits[i];
-             payload = { ...payload, hash: payload.julesSessionId || payload.imageUrl || (payload as any).id } as Partial<Cell>;
+        const seenIds = new Set<string>();
+
+        const processPayload = (payload: any) => {
+             const id = payload.portraitId || payload.id;
+             if (id && seenIds.has(id)) return;
+             if (id) seenIds.add(id);
+
+             payload = { ...payload, hash: payload.julesSessionId || payload.imageUrl || id } as Partial<Cell>;
              
              if (payload.x !== undefined && payload.y !== undefined) {
                  activeToRestore.push(payload as Cell);
@@ -74,12 +79,41 @@ function MainLayout() {
                      activeToRestore.push({ ...empty, ...payload, flash: 0.8 } as Cell);
                  }
              }
+        };
+
+        for (let i = 0; i < livePortraits.length; i++) {
+             processPayload(livePortraits[i]);
         }
 
-        setInitialCells(initialCells);
+        setInitialCells([...initialCells]); // Clone to ensure state updates properly if we pop later
         if (activeToRestore.length > 0) {
-            useMosaicStore.getState().syncFromCloud(activeToRestore);
+            useMosaicStore.getState().syncFromCloud([...activeToRestore]);
         }
+
+        // Fast Local Kiosk Fallback: Fetch any offline un-synced photos sitting in the local spool
+        // This ensures photos appear on the Pi mosaic instantly after reboot even if the GitHub PR hasn't merged yet.
+        const apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
+        fetch(`${apiBaseUrl}/api/local-portraits`)
+            .then(res => res.ok ? res.json() : [])
+            .then((localOfflinePortraits: any[]) => {
+                const newLocalCells: Cell[] = [];
+                for (const p of localOfflinePortraits) {
+                    const id = p.portraitId || p.id;
+                    if (id && !seenIds.has(id)) {
+                        seenIds.add(id);
+                        const empty = initialCells.shift();
+                        if (empty) {
+                            newLocalCells.push({ ...empty, ...p, hash: p.julesSessionId || p.imageUrl || id, flash: 0.8 } as Cell);
+                        }
+                    }
+                }
+                if (newLocalCells.length > 0) {
+                    setInitialCells([...initialCells]);
+                    useMosaicStore.getState().addBulkActiveCells(newLocalCells);
+                }
+            })
+            .catch(() => {}); // Ignore network errors if this is just a static Github pages load without an API
+
     }, [setInitialCells]);
 
     const handleTriggerAnimation = (targetCell: Cell, siblings: Cell[]) => {
