@@ -51,108 +51,55 @@ if [ "$STATUS" == "204" ]; then
     echo -e "  [${GREEN}OK${NC}] Internet connection verified (204 No Content / No Captive Portal)"
 else
     echo -e "  [${RED}FAIL${NC}] No internet connection detected!"
-    echo -e "\n  ${YELLOW}📷 ZERO-TOUCH WIFI SETUP 📷${NC}"
-    echo -e "  ${BLUE}Please show a Wi-Fi QR Code from your phone to the camera... (Timeout in 30s)${NC}"
     
-    QR_SUCCESS=0
-    if command -v zbarcam &> /dev/null; then
-        # UX BEST PRACTICE: Export DISPLAY so zbarcam shows a live camera viewfinder feed.
-        # This allows the staff to actually see what the lens sees and frame their phone perfectly.
+    echo -e "\n  ${YELLOW}🖥️  MANUAL NETWORK SETUP 🖥️${NC}"
+    if command -v zenity &> /dev/null; then
         export DISPLAY=:0
-        qr_output=$(timeout 30s zbarcam --raw /dev/video0 2>/dev/null | head -n 1)
-        
-        if [ -n "$qr_output" ] && [[ "$qr_output" == WIFI:* ]]; then
-            echo -e "  [${GREEN}OK${NC}] Scanned Wi-Fi QR Code successfully!"
+        if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager to connect manually?" --timeout=15; then
+            echo -e "  ${BLUE}Opening GUI Network Manager and On-Screen Keyboard...${NC}"
             
-            # Parse standard WIFI QR format (WIFI:T:WPA;S:NetworkName;P:Password;;)
-            ssid=$(echo "$qr_output" | sed -n 's/.*S:\([^;]*\).*/\1/p')
-            pass=$(echo "$qr_output" | sed -n 's/.*P:\([^;]*\).*/\1/p')
-            
-            if [ -n "$ssid" ]; then
-                echo -e "  ${BLUE}Connecting to network: $ssid...${NC}"
-                
-                if command -v nmcli &> /dev/null; then
-                    if [ -n "$pass" ]; then
-                        sudo nmcli dev wifi connect "$ssid" password "$pass" &>/dev/null
-                    else
-                         sudo nmcli dev wifi connect "$ssid" &>/dev/null
-                    fi
-                else
-                    echo -e "  ${RED}nmcli not found. Cannot configure network automatically.${NC}"
-                fi
-                
-                # Verify connection has successfully routed
-                echo -e "  ${BLUE}Verifying connection...${NC}"
-                sleep 5
-                QR_SUCCESS=1
-            else
-                echo -e "  [${RED}FAIL${NC}] Could not extract SSID from the QR code! (String: $qr_output)"
+            # Network Manager GUI
+            if command -v nm-connection-editor &> /dev/null; then
+                nm-connection-editor &
             fi
-        else
-            echo -e "  [${RED}FAIL${NC}] Camera scan timed out or an invalid QR code was presented."
-        fi
-    else
-        echo -e "  [${YELLOW}WARN${NC}] 'zbar-tools' is not installed. Skipping camera scanner."
-    fi
-
-    # Re-verify after potential QR code setup
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
-    if [ "$STATUS" == "204" ]; then
-        echo -e "  [${GREEN}OK${NC}] Internet connected successfully!"
-    else
-        if [ "$QR_SUCCESS" -eq 1 ]; then
-            echo -e "  [${RED}FAIL${NC}] Connected to Wi-Fi, but no internet access. May require a Captive Portal login."
-        fi
-        
-        echo -e "\n  ${YELLOW}🖥️  MANUAL GUI FALLBACK 🖥️${NC}"
-        if command -v zenity &> /dev/null; then
-            export DISPLAY=:0
-            if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager and Web Browser to connect manually?" --timeout=15; then
-                echo -e "  ${BLUE}Opening GUI Network Manager and Browser...${NC}"
-                
-                # Network Manager GUI
-                if command -v nm-connection-editor &> /dev/null; then
-                    nm-connection-editor &
-                fi
-                
-                # On-screen keyboard
-                if command -v onboard &> /dev/null; then
-                    onboard &
-                elif command -v matchbox-keyboard &> /dev/null; then
-                    matchbox-keyboard &
-                fi
-                
-                # Browser pointing to a guaranteed non-HTTPS URL to trigger the Captive Portal redirect
-                if command -v chromium-browser &> /dev/null; then
-                    chromium-browser http://neverssl.com &
-                elif command -v chromium &> /dev/null; then
-                    chromium http://neverssl.com &
-                fi
-                
-                zenity --info --title="Waiting for Internet" --text="Please use the windows that just opened to connect to Wi-Fi and log into any Captive Portals.\n\nClick OK when you are connected to the internet."
-                
-                # Final verification
-                STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
-                if [ "$STATUS" == "204" ]; then
-                    echo -e "  [${GREEN}OK${NC}] Internet connected successfully via manual setup!"
-                else
-                    CRITICAL_ERROR=1
-                    echo -e "  [${RED}FAIL${NC}] Still no internet connection after manual setup."
-                fi
-                
-                # Cleanup the fallback GUIs
-                pkill -f "nm-connection-editor" || true
-                pkill -f "chromium" || true
-                pkill -f "onboard" || true
-                pkill -f "matchbox-keyboard" || true
+            
+            # On-screen keyboard for the touch screen
+            if command -v onboard &> /dev/null; then
+                onboard &
+            elif command -v matchbox-keyboard &> /dev/null; then
+                matchbox-keyboard &
+            fi
+            
+            # Browser pointing to a guaranteed non-HTTPS URL to trigger the Captive Portal redirect
+            if command -v chromium-browser &> /dev/null; then
+                chromium-browser http://neverssl.com &
+            elif command -v chromium &> /dev/null; then
+                chromium http://neverssl.com &
+            fi
+            
+            zenity --info --title="Waiting for Internet" --text="Please use the windows that just opened to connect to Wi-Fi and log into any Captive Portals.\n\nClick OK when you are connected to the internet."
+            
+            # Final verification
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
+            if [ "$STATUS" == "204" ]; then
+                echo -e "  [${GREEN}OK${NC}] Internet connected successfully via manual setup!"
             else
                 CRITICAL_ERROR=1
-                echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
+                echo -e "  [${RED}FAIL${NC}] Still no internet connection after manual setup."
             fi
+            
+            # Cleanup the fallback GUIs
+            pkill -f "nm-connection-editor" || true
+            pkill -f "chromium" || true
+            pkill -f "onboard" || true
+            pkill -f "matchbox-keyboard" || true
         else
             CRITICAL_ERROR=1
             echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
         fi
+    else
+        CRITICAL_ERROR=1
+        echo -e "  [${YELLOW}WARN${NC}] Zenity not found. Cannot launch manual setup GUI."
     fi
 fi
 
