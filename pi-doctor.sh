@@ -58,21 +58,23 @@ else
         if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager to connect manually?" --timeout=15; then
             echo -e "  ${BLUE}Opening GUI Network Manager and On-Screen Keyboard...${NC}"
             
-            # Network Manager GUI
-            if command -v nm-connection-editor &> /dev/null; then
-                nm-connection-editor &
-            fi
+            # Launch tools and track PIDs for surgical cleanup
+            nm-connection-editor &
+            NM_PID=$!
             
             # On-screen keyboard for the touch screen
             if command -v onboard &> /dev/null; then
                 onboard &
+                KBD_PID=$!
             elif command -v matchbox-keyboard &> /dev/null; then
                 matchbox-keyboard &
+                KBD_PID=$!
             fi
             
-            # Browser pointing to a guaranteed non-HTTPS URL to trigger the Captive Portal redirect
+            # Browser for Captive Portals
             if command -v chromium &> /dev/null; then
                 chromium http://neverssl.com &
+                BROWSER_PID=$!
             fi
             
             zenity --info --title="Waiting for Internet" --text="Please use the windows that just opened to connect to Wi-Fi and log into any Captive Portals.\n\nClick OK when you are connected to the internet."
@@ -86,11 +88,10 @@ else
                 echo -e "  [${RED}FAIL${NC}] Still no internet connection after manual setup."
             fi
             
-            # Cleanup the fallback GUIs
-            pkill -f "nm-connection-editor" || true
-            pkill -f "chromium" || true
-            pkill -f "onboard" || true
-            pkill -f "matchbox-keyboard" || true
+            # Surgical Cleanup using PIDs
+            kill $NM_PID $KBD_PID $BROWSER_PID 2>/dev/null
+            sleep 1
+            kill -9 $NM_PID $KBD_PID $BROWSER_PID 2>/dev/null
         else
             CRITICAL_ERROR=1
             echo -e "  [${YELLOW}WARN${NC}] Proceeding without verified internet connection."
