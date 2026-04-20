@@ -6,7 +6,7 @@ This project demonstrates a robust **Edge vs. Cloud** split architecture, levera
 
 ---
 
-## 🏗️ The Architecture
+## 🏗️ High-Level Architecture
 
 The system is designed to survive brutal conference Wi-Fi dropouts by cleanly separating "fast" hardware tasks from "slow" AI and network tasks using a **"Golden Thread" ID tracking system**.
 
@@ -30,10 +30,35 @@ The Cloud server acts as the asynchronous receiver. It runs `BOOTH_ROLE=cloud`.
 
 ---
 
+## 🛡️ Enterprise Kiosk Hardening
+
+The physical kiosk represents a "Top 1%" zero-touch deployment strategy for conference floors. It is designed to self-heal, self-update, and resist physical tampering.
+
+### Zero-Touch Auto-Boot & Self-Healing
+*   **Systemd Orchestration:** The entire stack is managed by `nanobanana-booth.service`, ensuring the kiosk boots immediately into the UI when plugged into the wall.
+*   **Process Monitor (wait -n):** The `start-booth.sh` script monitors the Node.js backend, the Kiosk UI (Chromium), and the Python Camera Microservice simultaneously. If *any* of them crash, the entire kiosk intentionally restarts within 5 seconds.
+*   **Hardware Watchdog:** The Raspberry Pi's Broadcom BCM2835 hardware watchdog is enabled via the Linux kernel. If the OS experiences a total freeze (e.g., kernel panic, thermal lockup), the chip physically cuts power and cold-reboots the Pi.
+*   **Nightly Hardware Reboots:** A root cron job (`0 4 * * * /sbin/reboot`) forces a complete hardware reboot at 4:00 AM every night to clear GPU memory leaks and refresh network tunnels.
+
+### Zero-Trust Networking (Tailscale)
+*   **NAT Traversal:** The Pi uses Tailscale (WireGuard) to punch through restrictive conference firewalls (Captive Portals, UDP blocking) and communicate securely with the VPS.
+*   **VPS Lockdown (Docker Bypass Fix):** The VPS firewall explicitly drops all traffic to port `3001` on the public internet interface (`eth0`) via a custom `iptables DOCKER-USER` rule. The orchestrator API only accepts traffic from the encrypted `tailscale0` interface.
+*   **Captive Portal Fallback:** `pi-doctor.sh` attempts to bypass conference Wi-Fi limits. If it hits a Captive Portal, it automatically launches a temporary touchscreen GUI (Network Manager, Onboard Keyboard, and Chromium pointing to `neverssl.com`) to allow staff to accept terms before seamlessly resuming the zero-touch boot sequence.
+
+### Physical Security & UI Lockdown
+*   **X11 Lockdown:** The X11 display server is configured to ignore `Ctrl+Alt+F1` (TTY Switch) and `Ctrl+Alt+Backspace` (Server Kill). Malicious "BadUSB" devices cannot drop the kiosk into a root terminal.
+*   **Pironman OLED Privacy Patch:** The Pironman 5 case's front OLED screen driver was manually patched (`scripts/patch-oled.sh`) to hide the internal Tailscale IP address from attendees, displaying a clean "jules @ NEXT" brand graphic instead.
+*   **Scrollbar Suppression:** Chromium is launched with `--hide-scrollbars` to ensure no desktop UI elements bleed into the kiosk experience if the screen is dragged.
+
+### Over-The-Air (OTA) Updates
+*   **Smart Update Architecture:** On boot, the Pi gently fetches metadata from `origin/main`. If an update is found, it presents a `zenity` visual indicator to staff, safely forces a `git reset --hard`, and runs `npm ci` and `npm run build` only if dependencies or source code changed.
+
+---
+
 ## 🚀 Setup & Installation
 
 ### Prerequisites
-*   **Hardware:** Raspberry Pi 5, Raspberry Pi HQ Camera, USB Thermal Printer.
+*   **Hardware:** Raspberry Pi 5 (NVMe SSD), Arducam 4K HDR Camera, Phomemo USB Thermal Printer, Pironman 5 Case.
 *   **Cloud:** A VPS orchestrator (e.g., DigitalOcean, AWS).
 *   **Network:** Tailscale installed on both the Pi and the VPS for secure, bypassed-NAT communication.
 
@@ -54,7 +79,7 @@ The Cloud server acts as the asynchronous receiver. It runs `BOOTH_ROLE=cloud`.
    ```bash
    bash install.sh
    ```
-5. The booth will automatically launch Chromium in Kiosk mode on boot via `start-booth.sh`.
+5. *(Optional)* Patch the Pironman OLED driver for privacy: `bash scripts/patch-oled.sh`
 
 ### 2. VPS Setup (The Cloud Orchestrator)
 1. Clone this repository to your VPS (e.g., `/opt/nanobanana_backend`).
@@ -80,12 +105,3 @@ The Cloud server acts as the asynchronous receiver. It runs `BOOTH_ROLE=cloud`.
      -v $(pwd)/public/spool:/app/public/spool \
      nanobanana-orchestrator
    ```
-
----
-
-## 🛠️ Maintenance & Deployment
-The Raspberry Pi utilizes a "Smart Update Architecture". 
-Whenever the Pi boots (or the `nanobanana-booth` service restarts), `start-booth.sh` automatically fetches the latest commit from `origin/main`. 
-*   If `package.json` changed, it safely runs `npm ci`.
-*   If new code is detected, it automatically rebuilds the Vite frontend to flush the JSON data cache before launching the Chromium kiosk. 
-*   If no changes are detected, it initiates a "Fast Boot" skipping the npm and Vite steps entirely.
