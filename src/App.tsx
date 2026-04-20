@@ -124,7 +124,10 @@ function MainLayout() {
 
         // Fast Local Kiosk Fallback: Fetch any offline un-synced photos sitting in the local spool
         // This ensures photos appear on the Pi mosaic instantly after reboot even if the GitHub PR hasn't merged yet.
-        const apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
+        let apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
+        if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+            apiBaseUrl = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
+        }
         fetch(`${apiBaseUrl}/api/local-portraits`)
             .then(res => res.ok ? res.json() : [])
             .then((localOfflinePortraits: any[]) => {
