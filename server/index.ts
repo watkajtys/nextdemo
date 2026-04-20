@@ -283,7 +283,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
             prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required. Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}`,
             source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
             autoPr: true,
-            requirePlanApproval: false,
+            requireApproval: false,
         }).then(session => {
             console.log('🤖 Jules session started:', session.id);
             // Ideally we'd broadcast this session ID back to the client, but for now we just log it
