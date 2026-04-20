@@ -305,7 +305,33 @@ else
     # NEW: Display a graphical error if Zenity is available so staff can see it on the physical screen
     if command -v zenity &> /dev/null; then
         export DISPLAY=:0
-        zenity --error --title="Kiosk Boot Failure" --text="Critical hardware or configuration error detected during boot.\n\nPlease check the logs via SSH or review the console output.\n\nERROR SUMMARY:\n- See console for details." --timeout=30 &
+        
+        # Build a clear error summary for the UI
+        ERR_MSG="Critical errors detected during boot:\n\n"
+        
+        # Network checks
+        if ! command -v tailscale &> /dev/null || [ -z "$(tailscale ip -4 2>/dev/null)" ]; then
+            ERR_MSG="$ERR_MSG • Tailscale is disconnected\n"
+        fi
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
+        if [ "$STATUS" != "204" ]; then
+            ERR_MSG="$ERR_MSG • No internet connection\n"
+        fi
+        
+        # Hardware checks
+        if ! ls /dev/video* &> /dev/null; then
+            ERR_MSG="$ERR_MSG • Camera unplugged or not detected\n"
+        fi
+        if ! command -v lpstat &> /dev/null || [ "$(lpstat -p 2>/dev/null | grep -c "printer")" -eq 0 ]; then
+            ERR_MSG="$ERR_MSG • Thermal printer not found\n"
+        fi
+        
+        # Config checks
+        if [ ! -f ".env" ] || grep -q "your_api_key_here" .env; then
+            ERR_MSG="$ERR_MSG • Missing or invalid Gemini API Key\n"
+        fi
+
+        zenity --error --title="Kiosk Boot Failure" --text="$ERR_MSG\n\nPlease check connections and restart the booth." --timeout=60 &
     fi
 
     echo -e "${YELLOW}Waiting 10 seconds before attempting to continue...${NC}"
