@@ -33,7 +33,6 @@ interface Job {
     updatedAt: number;
 }
 const jobs = new Map<string, Job>();
-const portraitToJulesSession = new Map<string, string>();
 
 function updateJob(id: string, update: Partial<Job>) {
     const job = jobs.get(id) || { id, status: 'snapping', updatedAt: Date.now() };
@@ -113,6 +112,11 @@ async function initStorage() {
             portrait_id TEXT,
             file_path TEXT NOT NULL,
             status TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS jules_sessions (
+            portrait_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
             created_at INTEGER NOT NULL
         );
     `);
@@ -297,7 +301,15 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
             requireApproval: false,
         }).then(session => {
             console.log('🤖 Jules session started:', session.id);
-            portraitToJulesSession.set(portraitId, session.id);
+            try {
+                db.prepare(`
+                    INSERT INTO jules_sessions (portrait_id, session_id, created_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(portrait_id) DO UPDATE SET session_id=excluded.session_id
+                `).run(portraitId, session.id, Date.now());
+            } catch (err) {
+                console.error('❌ Failed to save Jules session to DB:', (err as Error).message);
+            }
             // Ideally we'd broadcast this session ID back to the client, but for now we just log it
         }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
     }
@@ -377,7 +389,14 @@ app.get('/api/job/:id', (req, res) => {
 });
 
 app.get('/api/portrait-status/:id', async (req, res) => {
-    const sessionId = portraitToJulesSession.get(req.params.id);
+    let sessionId: string | undefined;
+    try {
+        const row = db.prepare('SELECT session_id FROM jules_sessions WHERE portrait_id = ?').get(req.params.id) as { session_id: string } | undefined;
+        if (row) sessionId = row.session_id;
+    } catch (err) {
+        console.error('❌ Failed to fetch Jules session from DB:', (err as Error).message);
+    }
+
     if (!sessionId) {
         return res.status(404).json({ error: 'Session not found for portrait' });
     }
@@ -502,4 +521,3 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`☁️ Photobooth running on port ${PORT}`));
-));
