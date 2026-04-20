@@ -207,28 +207,34 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         }
     }
     portraitId = portraitId || `portrait-${Date.now()}`;
-    let stylizedBuffer = imageBuffer;
-    let fileExt = 'jpg';
-    // Detect image type from magic bytes (PNG vs JPG)
-    if (imageBuffer.length > 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
-        fileExt = 'png';
-    }
 
-    let finalImageToThreshold = imageBuffer;
+    // --- MANDATORY SQUARE CROP ---
+    // Ensure all downstream systems (Gemini, Printer, Cloud, Jules) receive a 1:1 image.
+    const squareBuffer = await sharp(imageBuffer)
+        .resize({ width: 1024, height: 1024, fit: 'cover' })
+        .png()
+        .toBuffer();
+
+    let stylizedBuffer = squareBuffer;
+    let fileExt = 'png';
+
+    let finalImageToThreshold = squareBuffer;
 
     if (process.env.BOOTH_ROLE !== 'cloud' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local edge Gemini stylization...');
 
             // --- EDGE COMPRESSION ---
-            const compressedBuffer = await sharp(imageBuffer)
-                .resize({ width: 1024, height: 1024, fit: 'cover', withoutEnlargement: true })
+            const compressedBuffer = await sharp(squareBuffer)
                 .jpeg({ quality: 80 })
                 .toBuffer();
 
             const response = await ai.models.generateContent({
                 model: 'gemini-3.1-flash-image-preview',
-                config: { responseModalities: ['TEXT', 'IMAGE'] },
+                config: { 
+                    responseModalities: ['TEXT', 'IMAGE'],
+                    imageConfig: { aspectRatio: '1:1' }
+                },
                 contents: [
                     { text: "CRITICAL INSTRUCTION: You are optimizing an image for a low-resolution thermal receipt printer. REDRAW the provided image using a highly simplified 1990s cyberpunk anime aesthetic. You MUST use extreme 1-bit high contrast. ABSOLUTELY NO SHADING OF ANY KIND. NO GRAY. NO STIPPLING. NO CROSS-HATCHING. NO FINE DETAILS. Use ONLY thick, solid black outlines and massive, flat shapes of pure black ink against a pure white background. The geometry must be sharp and exaggerated, but the rendering must be as simple and bold as a stencil or linocut. Maintain the core layout and framing of the original image. IF A PERSON IS PRESENT, stylize them as a 90s cyberpunk anime character. IF NO PERSON IS PRESENT, stylize the scene's key elements using the same bold aesthetic. DO NOT invent or insert characters if they are not present in the original image. Abandon all photographic realism. ABSOLUTELY NO TEXT. NO WATERMARKS. NO SIGNATURES." },
                     { inlineData: { mimeType: 'image/jpeg', data: compressedBuffer.toString('base64') } }
@@ -293,9 +299,17 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         const cleanVpsDomain = vpsDomain.replace(/\/$/, '');
         const fullImageUrl = `${cleanVpsDomain}${publicUrl}`;
 
+        const julesPrompt = `A new 1-bit high-contrast portrait was captured! Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}
+
+STORYTELLING FRAME & TONE:
+- Setting: A technofuturistic world where humans, robots, and AIs coexist.
+- Tone: Grounded optimism. This world has real human conflict, struggle, and texture, but it is fundamentally a good place.
+- Constraints: DO NOT make it a cynical, grim dystopian nightmare (No "Black Mirror"). DO NOT make it a flawless, conflict-free, overly saccharine utopia (No "Teletubbies").
+- Vibe: Atmospheric, punchy, and hopeful. Focus on resilience, quiet connection, and the "slice of life" in a high-tech society.`;
+
         // Fire-and-forget Jules session - never block the critical path
         jules.session({
-            prompt: `A new 1-bit high-contrast portrait was captured! Storytelling required. Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}`,
+            prompt: julesPrompt,
             source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
             autoPr: true,
             requireApproval: false,
