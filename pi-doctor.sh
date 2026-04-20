@@ -71,9 +71,7 @@ else
             fi
             
             # Browser pointing to a guaranteed non-HTTPS URL to trigger the Captive Portal redirect
-            if command -v chromium-browser &> /dev/null; then
-                chromium-browser http://neverssl.com &
-            elif command -v chromium &> /dev/null; then
+            if command -v chromium &> /dev/null; then
                 chromium http://neverssl.com &
             fi
             
