@@ -82,10 +82,16 @@ try {
 app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(cors());
 app.use('/portraits', express.static(path.join(process.cwd(), 'public', 'portraits')));
-app.use(express.static(path.join(process.cwd(), 'dist')));
+app.use('/nextdemo', express.static(path.join(process.cwd(), 'dist')));
+app.use(express.static(path.join(process.cwd(), 'dist'))); // Fallback for root
 app.use(express.json());
 
 // SPA Catch-all: If a request doesn't match an API or static file, serve index.html
+app.get(['/', '/nextdemo/*'], (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+});
+
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
@@ -324,7 +330,6 @@ STORYTELLING FRAME & TONE:
             } catch (err) {
                 console.error('❌ Failed to save Jules session to DB:', (err as Error).message);
             }
-            // Ideally we'd broadcast this session ID back to the client, but for now we just log it
         }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
     }
 
@@ -508,14 +513,36 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         const qrImg = await loadImage(qrBuffer);
         
         // Scale QR code and text dynamically based on print width
-        const qrSize = printWidth * 0.416; // 500/1200
-        const qrX = printWidth * 0.041;    // 50/1200
-        const qrY = printWidth + (printHeight - printWidth) * 0.083; // Relative to the bottom section
+        const footerHeight = printHeight - printWidth;
+        const qrSize = footerHeight * 0.75; 
+        const qrX = printWidth * 0.05; 
+        const qrY = printWidth + (footerHeight - qrSize) / 2; // Center QR vertically in footer
         ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
         
         ctx.fillStyle = 'black';
-        ctx.font = `bold ${printWidth * 0.066}px sans-serif`; // 80/1200
-        ctx.fillText('NANO BANANA', printWidth * 0.5, printWidth + (printHeight - printWidth) * 0.33);
+        ctx.textAlign = 'left';
+        const textX = qrX + qrSize + (printWidth * 0.05);
+        const textCenter = qrY + (qrSize / 2);
+        const maxWidth = printWidth - textX - (printWidth * 0.05); // Standard margin for right side
+
+        // Title text - Adjusted to sit slightly above center
+        ctx.font = `bold ${printWidth * 0.08}px sans-serif`;
+        ctx.fillText('JULES @ Next', textX, textCenter - (footerHeight * 0.15), maxWidth);
+
+        // URL - Just below title
+        ctx.font = `${printWidth * 0.045}px sans-serif`;
+        ctx.fillText('jules.google.com', textX, textCenter - (footerHeight * 0.02), maxWidth);
+        
+        // Metadata - Bottom aligned with QR
+        ctx.font = `500 ${printWidth * 0.035}px monospace`;
+        const displayId = portraitId.replace('portrait-', '');
+        const timestamp = portraitId.includes('-') ? portraitId.split('-')[1] : null;
+        const timeStr = timestamp && !isNaN(parseInt(timestamp)) 
+            ? new Date(parseInt(timestamp)).toLocaleString('en-US', { hour12: false }).replace(',', '') 
+            : new Date().toLocaleString('en-US', { hour12: false }).replace(',', '');
+            
+        ctx.fillText(`SESSION: ${displayId}`, textX, textCenter + (footerHeight * 0.15), maxWidth);
+        ctx.fillText(`CREATED: ${timeStr}`, textX, textCenter + (footerHeight * 0.25), maxWidth);
 
         const labelBuffer = canvas.toBuffer('image/png');
         setImmediate(async () => {
