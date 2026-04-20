@@ -19,17 +19,26 @@ echo -e "\n${YELLOW}1. Network Connectivity checks...${NC}"
 # Check Ethernet
 if ip link show eth0 2>/dev/null | grep -q "state UP"; then
     ETH_IP=$(ip -4 addr show eth0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1)
-    echo -e "  [${GREEN}OK${NC}] Ethernet (eth0) is UP - IP: ${ETH_IP:-None}"
+    if [ -n "$ETH_IP" ]; then
+        echo -e "  [${GREEN}OK${NC}] Ethernet (eth0) is CONNECTED - IP: ${ETH_IP}"
+        echo -e "         ${BLUE}Hint: Since Ethernet is active, Wi-Fi is optional!${NC}"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] Ethernet cable detected but no IP assigned. Check DHCP."
+    fi
 else
-    echo -e "  [${BLUE}INFO${NC}] Ethernet (eth0) is disconnected. (Plug in an ethernet cable to auto-connect)"
+    echo -e "  [${BLUE}INFO${NC}] Ethernet (eth0) is disconnected."
 fi
 
 # Check WiFi
 if ip link show wlan0 2>/dev/null | grep -q "state UP"; then
     WIFI_IP=$(ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1)
-    echo -e "  [${GREEN}OK${NC}] WiFi (wlan0) is UP - IP: ${WIFI_IP:-None}"
+    if [ -n "$WIFI_IP" ]; then
+        echo -e "  [${GREEN}OK${NC}] WiFi (wlan0) is CONNECTED - IP: ${WIFI_IP}"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] WiFi is UP but not connected to a network."
+    fi
 else
-    echo -e "  [${BLUE}INFO${NC}] WiFi (wlan0) is not connected."
+    echo -e "  [${BLUE}INFO${NC}] WiFi (wlan0) is not active."
 fi
 
 # Check Tailscale
@@ -73,8 +82,9 @@ else
             echo -e "  [${BLUE}INFO${NC}] No display env found, forcing DISPLAY=:0"
         fi
         
-        if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager to connect manually?" --timeout=15; then
+        if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nEthernet unplugged? Check cable.\nWiFi disconnected? Use your phone hotspot.\n\nWould you like to open the Network Manager to connect manually?" --timeout=20; then
             echo -e "  ${BLUE}Opening GUI Network Manager and On-Screen Keyboard...${NC}"
+            echo -e "  ${BLUE}Hint: For iPhone hotspots, ensure 'Maximize Compatibility' is ON.${NC}"
             
             # Launch tools and track PIDs for surgical cleanup
             nm-connection-editor &
@@ -94,8 +104,8 @@ else
                 chromium http://neverssl.com &
                 BROWSER_PID=$!
             fi
-            
-            zenity --info --title="Waiting for Internet" --text="Please use the windows that just opened to connect to Wi-Fi and log into any Captive Portals.\n\nClick OK when you are connected to the internet."
+
+            zenity --info --title="Pro-Tips for Staff" --text="1. Wi-Fi: Look for your phone's hotspot.\n2. Captive Portal: If a login page is required, it will open in the browser.\n3. Keyboard: Tap any text field to use the on-screen keyboard.\n\nClick OK when you are connected." --timeout=20
             
             # Final verification
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
