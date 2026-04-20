@@ -196,14 +196,19 @@ async function triggerPrint(imageUrl: string, portraitId: string, julesSessionId
 async function processImage(imageBuffer: Buffer, existingPortraitId?: string, skipSync: boolean = false) {
     const portraitId = existingPortraitId || `portrait-${Date.now()}`;
     let stylizedBuffer = imageBuffer;
+
+    // Detect image type from magic bytes (PNG vs JPG)
     let fileExt = 'jpg';
+    if (imageBuffer.length > 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
+        fileExt = 'png';
+    }
 
     let finalImageToThreshold = imageBuffer;
 
     if (process.env.BOOTH_ROLE !== 'cloud' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local edge Gemini stylization...');
-            
+
             // --- EDGE COMPRESSION ---
             const compressedBuffer = await sharp(imageBuffer)
                 .resize({ width: 1024, height: 1024, fit: 'cover', withoutEnlargement: true })
@@ -238,7 +243,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
             ctx.drawImage(img, 0, 0);
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
-            
+
             for (let i = 0; i < data.length; i += 4) {
                 const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
                 const val = brightness > 128 ? 255 : 0;
@@ -258,17 +263,16 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
     await fs.writeFile(imagePath, stylizedBuffer);
     const publicUrl = `/portraits/${imageFileName}`;
 
-    // Queue raw image for background sync (so Cloud can process it independently for the mosaic)
+    // Queue the stylized image (not the raw buffer) for background sync to the Cloud
     if (!skipSync) {
-        const queuePath = path.join(SPOOL_DIR, `raw-${portraitId}.jpg`);
+        const queuePath = path.join(SPOOL_DIR, `sync-${imageFileName}`);
         try {
-            await fs.writeFile(queuePath, imageBuffer);
+            await fs.writeFile(queuePath, stylizedBuffer);
             db.prepare("INSERT INTO uploads (file_path, portrait_id, status, created_at) VALUES (?, ?, 'pending', ?)").run(queuePath, portraitId, Date.now());
         } catch (e) {
             console.error('❌ Failed to queue image:', (e as Error).message);
         }
     }
-
     let julesSessionId: string | undefined;
     if (process.env.BOOTH_ROLE === 'cloud' && process.env.JULES_API_KEY) {
         // Construct the full public URL so Jules can fetch the image over the network
