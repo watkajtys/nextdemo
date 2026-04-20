@@ -142,38 +142,45 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
                 // Step 2: Poll for completion
                 let attempts = 0;
                 const poll = async () => {
-                    if (attempts > 30) throw new Error('Capture timeout');
-                    attempts++;
+                    try {
+                        if (attempts > 30) throw new Error('Capture timeout');
+                        attempts++;
 
-                    const jobRes = await fetch(`${apiBaseUrl}/api/job/${jobId}`);
-                    const job = await jobRes.json();
+                        const jobRes = await fetch(`${apiBaseUrl}/api/job/${jobId}`);
+                        const job = await jobRes.json();
 
-                    if (job.status === 'completed') {
-                        const { publicUrl, portraitId, julesSessionId } = job.result;
-                        const finalImageUrl = publicUrl.startsWith('http') 
-                            ? publicUrl 
-                            : `${apiBaseUrl}${publicUrl}`;
-                        
-                        try {
-                            const img = await preloadImage(finalImageUrl);
-                            useMosaicStore.setState((state) => ({
-                                imageCache: { ...state.imageCache, [tempHash]: img }
-                            }));
+                        if (job.status === 'completed') {
+                            const { publicUrl, portraitId, julesSessionId } = job.result;
+                            const finalImageUrl = publicUrl.startsWith('http') 
+                                ? publicUrl 
+                                : `${apiBaseUrl}${publicUrl}`;
                             
-                            // Removed redundant local print call to prevent double printing.
-                            // The backend handles printing automatically during processing.
+                            try {
+                                const img = await preloadImage(finalImageUrl);
+                                useMosaicStore.setState((state) => ({
+                                    imageCache: { ...state.imageCache, [tempHash]: img }
+                                }));
+                                
+                                // Removed redundant local print call to prevent double printing.
+                                // The backend handles printing automatically during processing.
 
-                        } catch (e) {
-                            console.error('Failed to preload image:', e);
+                            } catch (e) {
+                                console.error('Failed to preload image:', e);
+                            }
+
+                            setProcessing(false);
+                            finishCaptureAndAnimate(tempHash, finalImageUrl, julesSessionId);
+                            startCamera(); // Restart preview for next user
+                        } else if (job.status === 'failed') {
+                            throw new Error(job.error || 'Job failed');
+                        } else {
+                            setTimeout(poll, 1000);
                         }
-
+                    } catch (err) {
+                        console.error('Capture polling failed:', err);
                         setProcessing(false);
-                        finishCaptureAndAnimate(tempHash, finalImageUrl, julesSessionId);
-                        startCamera(); // Restart preview for next user
-                    } else if (job.status === 'failed') {
-                        throw new Error(job.error || 'Job failed');
-                    } else {
-                        setTimeout(poll, 1000);
+                        startCamera();
+                        finishCaptureAndAnimate(tempHash); // Fallback: trigger empty animation if hardware fails
                     }
                 };
 

@@ -1,3 +1,4 @@
+import os
 import io
 import time
 import threading
@@ -19,6 +20,7 @@ except Exception as e:
 camera_lock = threading.Lock()
 
 def generate_frames():
+    consecutive_errors = 0
     while True:
         frame = None
         with camera_lock:
@@ -27,8 +29,13 @@ def generate_frames():
                 # Fast capture from the main stream
                 picam2.capture_file(stream, format='jpeg')
                 frame = stream.getvalue()
+                consecutive_errors = 0
             except Exception as e:
                 print(f"Preview error: {e}")
+                consecutive_errors += 1
+                if consecutive_errors > 5:
+                    print("❌ Camera hardware failed. Forcing process exit to trigger kiosk auto-reboot.")
+                    os._exit(1)
         
         if frame:
             yield (b'--frame\r\n'

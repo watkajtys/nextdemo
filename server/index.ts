@@ -206,7 +206,6 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
     let stylizedBuffer = imageBuffer;
     let fileExt = 'jpg';
     // Detect image type from magic bytes (PNG vs JPG)
-    let fileExt = 'jpg';
     if (imageBuffer.length > 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
         fileExt = 'png';
     }
