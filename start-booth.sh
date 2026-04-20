@@ -190,7 +190,7 @@ echo "🖥️ Launching Kiosk UI..."
 # --disable-sync: Disables all sync features since there is no user profile.
 # --autoplay-policy=no-user-gesture-required: Allows media to play automatically.
 # --disk-cache-dir=/tmp/chromium-cache: Use a real temp dir instead of /dev/null to avoid errors.
-CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --autoplay-policy=no-user-gesture-required --disk-cache-dir=/tmp/chromium-cache --js-flags=\"--max-old-space-size=512\""
+CHROMIUM_FLAGS="--kiosk --incognito --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 --use-fake-ui-for-media-stream --disable-dev-shm-usage --no-first-run --disable-features=Translate,TranslateUI --disable-background-networking --disable-sync --autoplay-policy=no-user-gesture-required --disk-cache-dir=/tmp/chromium-cache --js-flags=\"--max-old-space-size=512\" --hide-scrollbars"
 
 # Note: Temporarily disable set -e here because if Chromium crashes/is closed, 
 # we want the script to continue to the standard trap and shutdown correctly.
