@@ -44,8 +44,17 @@ else
     echo -e "  [${YELLOW}WARN${NC}] Tailscale is NOT installed!"
 fi
 
+# Check DNS Health (Common Kiosk Failure Point)
+if command -v nslookup &> /dev/null; then
+    if nslookup google.com &> /dev/null; then
+        echo -e "  [${GREEN}OK${NC}] DNS resolution is working"
+    else
+        echo -e "  [${RED}FAIL${NC}] DNS resolution FAILED! (Wi-Fi connected but no internet/DNS)"
+        CRITICAL_ERROR=1
+    fi
+fi
+
 # Check Internet Access (Industry Standard Captive Portal Check)
-# Conferences often block ICMP (ping) or intercept traffic with hotel-style Captive Portals.
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 3 http://clients3.google.com/generate_204 || echo "000")
 if [ "$STATUS" == "204" ]; then
     echo -e "  [${GREEN}OK${NC}] Internet connection verified (204 No Content / No Captive Portal)"
@@ -54,7 +63,16 @@ else
     
     echo -e "\n  ${YELLOW}🖥️  MANUAL NETWORK SETUP 🖥️${NC}"
     if command -v zenity &> /dev/null; then
-        export DISPLAY=:0
+        # Robust Display Detection for 2026 (Wayland vs X11)
+        if [ -n "$WAYLAND_DISPLAY" ]; then
+            echo -e "  [${BLUE}INFO${NC}] Wayland session detected ($WAYLAND_DISPLAY)"
+        elif [ -n "$DISPLAY" ]; then
+            echo -e "  [${BLUE}INFO${NC}] X11 session detected ($DISPLAY)"
+        else
+            export DISPLAY=:0
+            echo -e "  [${BLUE}INFO${NC}] No display env found, forcing DISPLAY=:0"
+        fi
+        
         if zenity --question --title="Network Setup" --text="No internet connection detected.\n\nWould you like to open the Network Manager to connect manually?" --timeout=15; then
             echo -e "  ${BLUE}Opening GUI Network Manager and On-Screen Keyboard...${NC}"
             
@@ -182,6 +200,15 @@ if command -v vcgencmd &> /dev/null; then
          CRITICAL_ERROR=1
     else
          echo -e "  [${YELLOW}WARN${NC}] Historical undervoltage detected since boot. Your power supply may be inadequate during peak load."
+    fi
+fi
+
+# Check Hardware Watchdog (Industry Standard for 24/7 Kiosks)
+if [ -f "/boot/firmware/config.txt" ]; then
+    if grep -q "dtparam=watchdog=on" /boot/firmware/config.txt; then
+        echo -e "  [${GREEN}OK${NC}] Hardware Watchdog is enabled in config.txt"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] Hardware Watchdog is DISABLED. The Pi cannot auto-reboot on a hard freeze."
     fi
 fi
 
