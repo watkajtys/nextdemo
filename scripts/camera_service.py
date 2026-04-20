@@ -8,41 +8,63 @@ from picamera2 import Picamera2
 app = Flask(__name__)
 picam2 = Picamera2()
 
+# Global variables to store the latest frame for the preview
+last_frame = None
+frame_lock = threading.Lock()
+camera_operation_lock = threading.Lock()
+
+def camera_worker():
+    """
+    Background thread that constantly pulls frames from the camera.
+    This is MUCH more efficient than calling capture_file in a loop.
+    """
+    global last_frame
+    consecutive_errors = 0
+    
+    while True:
+        try:
+            # capture_file(format='jpeg') on the main stream is fast if the camera is already running
+            stream = io.BytesIO()
+            with camera_operation_lock:
+                picam2.capture_file(stream, format='jpeg')
+            
+            with frame_lock:
+                last_frame = stream.getvalue()
+            
+            consecutive_errors = 0
+        except Exception as e:
+            print(f"Camera worker error: {e}")
+            consecutive_errors += 1
+            if consecutive_errors > 10:
+                print("❌ Camera hardware failed. Forcing process exit to trigger kiosk auto-reboot.")
+                os._exit(1)
+        
+        # Aim for ~20 FPS preview to keep CPU usage low
+        time.sleep(0.05)
+
 try:
-    # Configure for a 1080x1080 square to match our physical prints perfectly
+    # Configure for a 1080x1080 square to match our physical prints
     config = picam2.create_preview_configuration(main={"size": (1080, 1080)})
     picam2.configure(config)
     picam2.start()
     print("✅ Picamera2 started successfully.")
+    
+    # Start the background frame grabber
+    threading.Thread(target=camera_worker, daemon=True).start()
 except Exception as e:
     print(f"❌ Error starting camera: {e}")
 
-camera_lock = threading.Lock()
-
 def generate_frames():
-    consecutive_errors = 0
+    """Yields the latest frame from the background worker."""
     while True:
-        frame = None
-        with camera_lock:
-            try:
-                stream = io.BytesIO()
-                # Fast capture from the main stream
-                picam2.capture_file(stream, format='jpeg')
-                frame = stream.getvalue()
-                consecutive_errors = 0
-            except Exception as e:
-                print(f"Preview error: {e}")
-                consecutive_errors += 1
-                if consecutive_errors > 5:
-                    print("❌ Camera hardware failed. Forcing process exit to trigger kiosk auto-reboot.")
-                    os._exit(1)
+        with frame_lock:
+            frame = last_frame
         
         if frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         
-        # Limit framerate to reduce CPU load (approx 15-20 fps)
-        time.sleep(0.05)
+        time.sleep(0.06) # Match the worker's rate slightly slower
 
 @app.route('/preview')
 def preview():
@@ -50,16 +72,24 @@ def preview():
 
 @app.route('/capture', methods=['POST'])
 def capture():
+    """
+    Triggers a high-res capture. 
+    By using the same camera_operation_lock, we ensure we don't 
+    interrupt the sensor while the worker is grabbing a frame.
+    """
     stream = io.BytesIO()
-    with camera_lock:
-        try:
-            # Synchronous native capture guarantees zero-shutter-lag
+    try:
+        with camera_operation_lock:
+            # We take a fresh capture from the sensor for maximum quality
             picam2.capture_file(stream, format='jpeg')
-        except Exception as e:
-            return f"Capture error: {e}", 500
-    
-    stream.seek(0)
-    return send_file(stream, mimetype='image/jpeg')
+        
+        stream.seek(0)
+        print("📸 High-res capture successful")
+        return send_file(stream, mimetype='image/jpeg')
+    except Exception as e:
+        print(f"❌ Capture error: {e}")
+        return f"Capture error: {e}", 500
 
 if __name__ == '__main__':
+    # Use threaded=True to allow multiple preview connections
     app.run(host='127.0.0.1', port=5000, threaded=True)
