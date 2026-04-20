@@ -194,9 +194,17 @@ async function triggerPrint(imageUrl: string, portraitId: string, julesSessionId
 }
 
 async function processImage(imageBuffer: Buffer, existingPortraitId?: string, skipSync: boolean = false) {
-    const portraitId = existingPortraitId || `portrait-${Date.now()}`;
+    let portraitId = existingPortraitId;
+    if (typeof portraitId === 'string') {
+        portraitId = path.basename(portraitId);
+        // Ensure it only contains safe characters to prevent any unexpected filesystem issues
+        if (!/^[a-zA-Z0-9-_]+$/.test(portraitId)) {
+            throw new Error('Invalid portraitId format');
+        }
+    }
+    portraitId = portraitId || `portrait-${Date.now()}`;
     let stylizedBuffer = imageBuffer;
-
+    let fileExt = 'jpg';
     // Detect image type from magic bytes (PNG vs JPG)
     let fileExt = 'jpg';
     if (imageBuffer.length > 8 && imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
@@ -347,10 +355,15 @@ app.post('/api/process', requireSecret, upload.single('image'), async (req, res)
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
     try {
         const portraitId = req.body.portraitId;
-        const result = await processImage(req.file.buffer, portraitId, true);
+        const buffer = await fs.readFile(req.file.path);
+        const result = await processImage(buffer, portraitId, true);
         res.status(200).json({ printData: result });
     } catch (e) {
         res.status(500).json({ error: (e as Error).message });
+    } finally {
+        if (req.file && req.file.path) {
+            try { await fs.unlink(req.file.path); } catch (e) {}
+        }
     }
 });
 
@@ -391,8 +404,8 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         portraitId = path.basename(portraitId);
         
         // SSRF Protection: Only allow local relative paths
-        if (!imageUrl.startsWith('/')) {
-            return res.status(400).json({ error: 'Invalid imageUrl: Must be a relative path' });
+        if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('/') || imageUrl.startsWith('//')) {
+            return res.status(400).json({ error: 'Invalid imageUrl: Must be a strict relative path' });
         }
         let fetchUrl = `http://127.0.0.1:${PORT}${imageUrl}`;
 

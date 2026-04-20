@@ -106,12 +106,19 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
             img.crossOrigin = "anonymous"; // Important for canvas drawing from external URLs (like Firebase)
 
             // Fix absolute path mapping for GitHub Pages subpath hosting vs localhost root
-            const safeUrl = url.startsWith('/') && !url.startsWith('//') 
-                ? import.meta.env.BASE_URL + url.slice(1) 
-                : url;
-            
-            await new Promise((resolve, reject) => {
-                img.onload = resolve;
+            let safeUrl = url;
+            if (url.startsWith('/') && !url.startsWith('//')) {
+                if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+                    // On the public live site, fetch images securely from the Cloud VPS Tailscale Funnel
+                    const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
+                    safeUrl = `${vpsDomain}${url}`;
+                } else {
+                    // On the local Pi (or local dev), fetch images instantly from the local disk via Express
+                    safeUrl = import.meta.env.BASE_URL + url.slice(1);
+                }
+            }
+
+            await new Promise((resolve, reject) => {                img.onload = resolve;
                 img.onerror = reject;
                 img.src = safeUrl;
             });
