@@ -12,6 +12,43 @@ The system is designed to survive brutal conference Wi-Fi dropouts by cleanly se
 
 ### 1. The Edge (Raspberry Pi 5)
 The Pi is responsible for the immediate, physical user experience. It runs `BOOTH_ROLE=edge`.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend (React)
+    participant Edge Backend (Pi)
+    participant Camera (Python)
+    participant Cloud VPS
+    participant Jules Agent
+    participant GitHub
+    
+    User->>Frontend (React): Clicks Shutter
+    Frontend (React)->>Edge Backend (Pi): POST /api/capture
+    Edge Backend (Pi)->>Camera (Python): Request Frame (http://127.0.0.1:5000)
+    Camera (Python)-->>Edge Backend (Pi): Raw JPEG Buffer
+    
+    rect rgb(50, 50, 50)
+        note right of Edge Backend (Pi): Local Hardware Flow (Zero Latency)
+        Edge Backend (Pi)->>Edge Backend (Pi): Local Gemini Stylization
+        Edge Backend (Pi)->>Edge Backend (Pi): 1-Bit Mathematical Thresholding
+        Edge Backend (Pi)->>Thermal Printer: Print Receipt & QR Code
+    end
+    
+    Edge Backend (Pi)->>SQLite Queue: Save raw JPEG & portraitId
+    
+    rect rgb(20, 60, 20)
+        note right of Edge Backend (Pi): Asynchronous Tailscale Sync
+        loop Every 15 Seconds
+            Edge Backend (Pi)->>Cloud VPS: POST /api/process (Raw JPEG)
+        end
+    end
+    
+    Cloud VPS->>Jules Agent: Trigger @google/jules-sdk (Storytelling)
+    Jules Agent->>GitHub: Open & Merge Pull Request with JSON Metadata
+    Frontend (React)->>GitHub: Polls for Merged PR Data
+```
+
 *   **Hardware ISP Pipeline:** A native Python microservice (`scripts/camera_service.py`) uses `Picamera2` to bypass V4L2 lockups. It streams a live MJPEG preview to the React frontend and handles instantaneous, zero-shutter-lag high-res captures.
 *   **Local Gemini AI:** The Node.js backend compresses the raw 1080p frame and feeds it to a local Gemini 3.1 Flash model. The prompt aggressively forces a 1-bit, high-contrast cyberpunk anime aesthetic.
 *   **Hardware Safety:** The backend runs a mathematical 1-bit thresholding algorithm on the AI output. This guarantees that the USB thermal printer *never* receives grayscale or color pixels, which would otherwise crash the hardware buffer.
