@@ -261,10 +261,10 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             const openingCell = animatingCells.find(c => c === clickedCell);
             if (openingCell && openingCell.hoverProgress) {
                 ctx.save();
-                // Reset transform to screen space for the full-screen fade
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                // Reset transform to screen space (accounting for DPR) for the full-screen fade
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.fillStyle = `rgba(0, 0, 0, ${openingCell.hoverProgress * 0.5})`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillRect(0, 0, viewport.w, viewport.h);
                 ctx.restore();
             }
 
