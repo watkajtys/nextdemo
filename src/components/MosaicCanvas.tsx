@@ -227,6 +227,17 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                 ctx.strokeRect(cell.x, cell.y, cell.w, cell.h);
             }
 
+            // Draw a cinematic dimming overlay if a cell is being opened
+            const openingCell = animatingCells.find(c => c === clickedCell);
+            if (openingCell && openingCell.hoverProgress) {
+                ctx.save();
+                // Reset transform to screen space for the full-screen fade
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillStyle = `rgba(0, 0, 0, ${openingCell.hoverProgress * 0.5})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
+
             for (const cell of animatingCells) {
                 const eased = easeOutCubic(cell.hoverProgress || 0);
 
@@ -587,7 +598,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="absolute inset-0 flex items-center justify-center p-4 z-20 bg-black/40 pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center p-4 z-20 pointer-events-none"
                      >
                          <motion.div 
                             initial={{ scale: 0.9, y: 20 }}
