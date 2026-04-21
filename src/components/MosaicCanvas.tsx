@@ -127,12 +127,14 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             ctx.scale(camera.zoom, camera.zoom);
             ctx.translate(-camera.x, -camera.y);
 
-            const STRIP_HEIGHT = 200;
-            let screenBigW = Math.min(800, canvas.width * 0.9);
+            const isMobile = canvas.width < 600;
+            const STRIP_HEIGHT = isMobile ? 150 : 200;
+            let screenBigW = isMobile ? (canvas.width * 0.95) : Math.min(800, canvas.width * 0.9);
             let screenBigH = screenBigW * 0.95 + STRIP_HEIGHT;
 
-            if (screenBigH > canvas.height * 0.9) {
-                screenBigH = canvas.height * 0.9;
+            // Ensure the card doesn't exceed the viewport height (handling landscape/short screens)
+            if (screenBigH > canvas.height * 0.92) {
+                screenBigH = canvas.height * 0.92;
                 screenBigW = (screenBigH - STRIP_HEIGHT) / 0.95;
             }
 
@@ -598,7 +600,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="absolute inset-0 flex items-center justify-center p-4 z-20 pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center p-2 sm:p-4 z-20 pointer-events-none"
                      >
                          <motion.div 
                             initial={{ scale: 0.9, y: 20 }}
@@ -608,32 +610,34 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent" 
                             onClick={(e) => handleClose(e)}
                             style={{ 
-                                width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
-                                height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 200 : 960
+                                width: typeof window !== 'undefined' ? (window.innerWidth < 600 ? window.innerWidth * 0.95 : Math.min(800, window.innerWidth * 0.9)) : 800, 
+                                height: typeof window !== 'undefined' ? (window.innerWidth < 600 ? (window.innerWidth * 0.95 * 0.95 + 150) : (Math.min(800, window.innerWidth * 0.9) * 0.95 + 200)) : 960,
+                                // Responsive viewport clipping protection
+                                maxHeight: typeof window !== 'undefined' ? window.innerHeight * 0.92 : 'none'
                             }}
                          >
                              {/* Close Button Top-Right Corner of the Image Area */}
                              <div 
-                                className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
+                                className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
                                 onClick={(e) => handleClose(e)}
                              >
-                                <div className="w-5 h-[3px] bg-white rotate-45 absolute group-hover:scale-110" />
-                                <div className="w-5 h-[3px] bg-white -rotate-45 absolute group-hover:scale-110" />
+                                <div className="w-4 sm:w-5 h-[3px] bg-white rotate-45 absolute group-hover:scale-110" />
+                                <div className="w-4 sm:w-5 h-[3px] bg-white -rotate-45 absolute group-hover:scale-110" />
                              </div>
 
-                             <div className="w-full h-[200px] p-8 flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-6 mb-4 border-b border-gray-100 pb-3">
+                             <div className="w-full h-[150px] sm:h-[200px] p-5 sm:p-8 flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-4 sm:gap-6 mb-3 sm:mb-4 border-b border-gray-100 pb-2 sm:pb-3">
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">Session Node</span>
-                                        <h3 className="font-mono text-2xl font-bold tracking-tight m-0 leading-none text-gray-900">{openedCell.hash || 'A1-B2-C3'}</h3>
+                                        <span className="text-[9px] sm:text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">Session Node</span>
+                                        <h3 className="font-mono text-lg sm:text-2xl font-bold tracking-tight m-0 leading-none text-gray-900">{openedCell.hash || 'A1-B2-C3'}</h3>
                                     </div>
                                     <div className="flex flex-col ml-auto text-right">
-                                        <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">Capture Log</span>
-                                        <span className="text-gray-600 font-mono text-sm">{openedCell.time}</span>
+                                        <span className="text-[9px] sm:text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">Capture Log</span>
+                                        <span className="text-gray-600 font-mono text-xs sm:text-sm">{openedCell.time}</span>
                                     </div>
                                   </div>
                                   <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
-                                      <p className="font-sans text-lg text-gray-800 leading-relaxed font-medium">
+                                      <p className="font-sans text-base sm:text-lg text-gray-800 leading-relaxed font-medium">
                                           {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
                                       </p>
                                   </div>
