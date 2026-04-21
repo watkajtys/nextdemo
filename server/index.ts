@@ -509,7 +509,20 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         }
         
         ctx.drawImage(portraitImg, sx, sy, sWidth, sHeight, 0, 0, printWidth, printWidth);
-        const qrBuffer = await QRCode.toBuffer(`https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`);
+        
+        // --- FINAL POLISH: Divider Line ---
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, printWidth);
+        ctx.lineTo(printWidth, printWidth);
+        ctx.stroke();
+
+        // High error correction for robust scanning on thermal paper
+        const qrBuffer = await QRCode.toBuffer(`https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`, {
+            errorCorrectionLevel: 'H',
+            margin: 1
+        });
         const qrImg = await loadImage(qrBuffer);
         
         // Scale QR code and text dynamically based on print width
@@ -529,8 +542,8 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         ctx.font = `bold ${printWidth * 0.08}px sans-serif`;
         ctx.fillText('JULES @ Next', textX, textCenter - (footerHeight * 0.15), maxWidth);
 
-        // URL - Just below title
-        ctx.font = `${printWidth * 0.045}px sans-serif`;
+        // URL - Just below title (Bold for branding)
+        ctx.font = `bold ${printWidth * 0.045}px sans-serif`;
         ctx.fillText('jules.google.com', textX, textCenter - (footerHeight * 0.02), maxWidth);
         
         // Metadata - Bottom aligned with QR

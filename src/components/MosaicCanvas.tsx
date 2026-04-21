@@ -484,29 +484,39 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const handlePointerUp = (e: React.PointerEvent) => {
         interactionRef.current.isPointerDown = false;
         if (!interactionRef.current.pointerMoved) {
-            if (clickedCellRef.current) {
-                clickedCellRef.current = null;
-                setOpenedCell(null);
-                return;
-            }
             const pos = getMousePos(e);
             const { activeCells } = useMosaicStore.getState();
+            
+            let clickedCell: Cell | null = null;
             for (let i = activeCells.length - 1; i >= 0; i--) {
                 const cell = activeCells[i];
                 if (pos.worldX >= cell.x && pos.worldX <= cell.x + cell.w &&
                     pos.worldY >= cell.y && pos.worldY <= cell.y + cell.h) {
-                    clickedCellRef.current = cell;
-                    setOpenedCell(cell);
+                    clickedCell = cell;
                     break;
                 }
+            }
+
+            if (clickedCell === clickedCellRef.current) {
+                // If clicking the already opened cell or empty space, close it
+                clickedCellRef.current = null;
+                setOpenedCell(null);
+            } else {
+                // Otherwise open the new cell (or switch to it)
+                clickedCellRef.current = clickedCell;
+                setOpenedCell(clickedCell);
             }
         }
     };
 
+    const handleClose = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        clickedCellRef.current = null;
+        setOpenedCell(null);
+    };
+
     const handlePointerLeave = () => {
         interactionRef.current.isPointerDown = false;
-        // Do NOT reset clickedCellRef or openedCell here! 
-        // On touchscreens, lifting your finger triggers pointerleave, which would instantly close the modal.
         mouseRef.current.x = -1000;
         mouseRef.current.y = -1000;
     };
@@ -573,19 +583,31 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             <AnimatePresence>
                  {openedCell && (
                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        transition={{ delay: 0.2, duration: 0.3 }}
-                        className="pointer-events-none absolute inset-0 flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute inset-0 flex items-center justify-center p-4 z-20 bg-black/40 cursor-zoom-out"
+                        onClick={() => handleClose()}
                      >
-                         <div className="relative text-[#111] pointer-events-auto flex flex-col justify-end" style={{ 
-                             width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
-                             height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 120 : 880
-                         }}>
-                             <div className="w-full h-[120px] p-6 flex flex-col justify-center">
+                         <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-default" 
+                            onClick={(e) => handleClose(e)}
+                            style={{ 
+                                width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
+                                height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 120 : 880
+                            }}
+                         >
+                             <div className="w-full h-[120px] p-6 flex flex-col justify-center bg-white/90 backdrop-blur-md">
                                   <div className="flex items-center gap-4 mb-2">
-                                    <div className="h-6 w-6 rounded-full border-[3px] border-[#888] flex items-center justify-center">
+                                    <div 
+                                        className="h-8 w-8 rounded-full border-[3px] border-[#888] flex items-center justify-center cursor-pointer hover:border-[#333] hover:bg-gray-100 transition-all"
+                                        onClick={(e) => handleClose(e)}
+                                    >
                                         <div className="w-4 h-[3px] bg-[#888] rotate-45 absolute" />
                                         <div className="w-4 h-[3px] bg-[#888] -rotate-45 absolute" />
                                     </div>
@@ -596,7 +618,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                       {openedCell.storyPanel || 'Processing neural scan... waiting for Jules.'}
                                   </p>
                              </div>
-                         </div>
+                         </motion.div>
                      </motion.div>
                  )}
             </AnimatePresence>
