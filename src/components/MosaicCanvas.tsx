@@ -466,6 +466,9 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
+        // Prevent panning the background while a portrait is open
+        if (openedCell) return;
+        
         interactionRef.current.isPointerDown = true;
         interactionRef.current.pointerMoved = false;
         const pos = getMousePos(e);
@@ -480,7 +483,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const handlePointerMove = (e: React.PointerEvent) => {
         const pos = getMousePos(e);
 
-        if (interactionRef.current.isPointerDown) {
+        if (interactionRef.current.isPointerDown && !openedCell) {
             const dx = pos.screenX - interactionRef.current.dragStart.x;
             const dy = pos.screenY - interactionRef.current.dragStart.y;
             // Increased jitter tolerance to 15px for touchscreen kiosks
@@ -496,6 +499,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
     const handlePointerUp = (e: React.PointerEvent) => {
         interactionRef.current.isPointerDown = false;
+        if (openedCell) return; // Let the HTML overlay handle closing
+        
         if (!interactionRef.current.pointerMoved) {
             const pos = getMousePos(e);
             const { activeCells } = useMosaicStore.getState();
@@ -611,7 +616,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="absolute inset-0 flex items-center justify-center p-2 sm:p-4 z-20 pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center p-2 sm:p-4 z-20 pointer-events-auto"
+                        onClick={() => handleClose()}
                      >
                          <motion.div 
                             initial={{ scale: 0.9, y: 20 }}
