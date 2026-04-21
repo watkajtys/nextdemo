@@ -438,17 +438,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         };
     }, [animState, onAnimationComplete]);
 
-    const [debugLogs, setDebugLogs] = useState<string[]>([]);
-
-    const addLog = (msg: string) => {
-        setDebugLogs(prev => {
-            const next = [...prev, msg];
-            if (next.length > 5) next.shift();
-            return next;
-        });
-    };
-
-    // Input handlers
     const getMousePos = (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return null;
@@ -510,7 +499,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (!pos) return;
 
         if (interactionRef.current.activePointers.size === 1) {
-            addLog(`PointerDown [${e.pointerType}]: ${Math.round(e.clientX)},${Math.round(e.clientY)}`);
+
             interactionRef.current.isPointerDown = true;
             interactionRef.current.pointerMoved = false;
             interactionRef.current.downTime = Date.now();
@@ -528,7 +517,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     };
 
     const handlePointerCancel = (e: React.PointerEvent) => {
-        addLog(`PointerCancel [${e.pointerType}]`);
+
         interactionRef.current.activePointers.delete(e.pointerId);
         if (canvasRef.current && canvasRef.current.hasPointerCapture(e.pointerId)) {
              canvasRef.current.releasePointerCapture(e.pointerId);
@@ -597,7 +586,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
             // Strict slop radius threshold (15px) for high-DPI screens
             if (!interactionRef.current.pointerMoved && Math.hypot(dx, dy) > 15) {
-                addLog(`PointerMoved threshold broken (${Math.round(Math.hypot(dx, dy))}px)`);
+
                 interactionRef.current.pointerMoved = true;
             }
 
@@ -625,7 +614,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         // If gesture wasn't a valid primary pointer sequence, abort
         if (!wasPointerDown) {
-            addLog(`Tap aborted: no pointer down state`);
+
             return;
         }
 
@@ -634,14 +623,14 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         // If they dragged their finger past the slop radius, it's a pan
         if (interactionRef.current.pointerMoved) {
-            addLog(`Tap aborted: pointer was moved`);
+
             return;
         }
 
         // Enforce time threshold to distinguish tap from drag-and-hold
         const timeElapsed = Date.now() - interactionRef.current.downTime;
         if (timeElapsed > 750) {
-            addLog(`Tap aborted: too long (${timeElapsed}ms)`);
+
             return;
         }
 
@@ -668,12 +657,12 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         }
 
         if (clickedCell) {
-            addLog(`Tap successful! Cell found.`);
+
             interactionRef.current.lastOpenedTime = Date.now();
             clickedCellRef.current = clickedCell;
             setOpenedCell(clickedCell);
         } else {
-            addLog(`Tap successful, empty space.`);
+
         }
     };
 
@@ -765,13 +754,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                      </motion.div>
                  )}
             </AnimatePresence>
-
-            {/* Debug UI for tracking interactions on mobile devices */}
-            <div className="pointer-events-none fixed bottom-0 left-0 p-2 z-50 flex flex-col gap-1 text-[10px] font-mono text-green-400 bg-black/60 rounded-tr-lg">
-                {debugLogs.map((log, i) => (
-                    <div key={i}>{log}</div>
-                ))}
-            </div>
         </div>
     );
 };
