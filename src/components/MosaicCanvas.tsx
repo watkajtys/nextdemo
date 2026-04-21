@@ -36,6 +36,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const cameraRef = useRef<Camera>({ x: GRID_WORLD_SIZE / 2, y: GRID_WORLD_SIZE / 2, zoom: 1 });
     const mouseRef = useRef({ x: -1000, y: -1000 });
     const clickedCellRef = useRef<Cell | null>(null);
+    const viewportRef = useRef({ w: typeof window !== 'undefined' ? window.innerWidth : 800, h: typeof window !== 'undefined' ? window.innerHeight : 600 });
     
     // Interaction state
     const interactionRef = useRef({
@@ -68,8 +69,17 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         const resizeCanvas = () => {
             const width = window.innerWidth;
             const height = window.innerHeight;
-            canvas.width = width;
-            canvas.height = height;
+            const dpr = window.devicePixelRatio || 1;
+
+            viewportRef.current = { w: width, h: height };
+
+            // Physical canvas resolution
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+
+            // CSS canvas display size
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
 
             const minZoomX = width / (SVG_WORLD_W * 1.1);
             const minZoomY = height / (SVG_WORLD_H * 1.1);
@@ -84,8 +94,9 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         const constrainCamera = () => {
             const camera = cameraRef.current;
-            const visibleW = canvas.width / camera.zoom;
-            const visibleH = canvas.height / camera.zoom;
+            const viewport = viewportRef.current;
+            const visibleW = viewport.w / camera.zoom;
+            const visibleH = viewport.h / camera.zoom;
 
             const paddingX = SVG_WORLD_W * 0.1;
             const paddingY = SVG_WORLD_H * 0.1;
@@ -118,26 +129,32 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             const state = useMosaicStore.getState();
             const { activeCells, emptyBaseCells } = state;
             const camera = cameraRef.current;
+            const viewport = viewportRef.current;
             const mouseX = mouseRef.current.x;
             const mouseY = mouseRef.current.y;
             let clickedCell = clickedCellRef.current;
 
-            ctx.fillStyle = '#0f0f11';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const dpr = window.devicePixelRatio || 1;
 
             ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(dpr, dpr);
+
+            ctx.fillStyle = '#0f0f11';
+            ctx.fillRect(0, 0, viewport.w, viewport.h);
+
+            ctx.save();
+            ctx.translate(viewport.w / 2, viewport.h / 2);
             ctx.scale(camera.zoom, camera.zoom);
             ctx.translate(-camera.x, -camera.y);
 
-            const isMobile = canvas.width < 600;
+            const isMobile = viewport.w < 600;
             const STRIP_HEIGHT = isMobile ? 150 : 200;
-            let screenBigW = isMobile ? (canvas.width * 0.95) : Math.min(800, canvas.width * 0.9);
+            let screenBigW = isMobile ? (viewport.w * 0.95) : Math.min(800, viewport.w * 0.9);
             let screenBigH = screenBigW * 0.95 + STRIP_HEIGHT;
 
             // Ensure the card doesn't exceed the viewport height (handling landscape/short screens)
-            if (screenBigH > canvas.height * 0.92) {
-                screenBigH = canvas.height * 0.92;
+            if (screenBigH > viewport.h * 0.92) {
+                screenBigH = viewport.h * 0.92;
                 screenBigW = (screenBigH - STRIP_HEIGHT) / 0.95;
             }
 
@@ -407,6 +424,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             }
 
             ctx.restore();
+            ctx.restore(); // Restore DPR scale
             animationFrameId = requestAnimationFrame(draw);
         };
 
