@@ -43,6 +43,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         pointerMoved: false,
         dragStart: { x: 0, y: 0 },
         cameraStart: { x: 0, y: 0 },
+        downTime: 0,
         initialPinchDistance: null as number | null,
         initialPinchZoom: 1
     });
@@ -471,6 +472,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         
         interactionRef.current.isPointerDown = true;
         interactionRef.current.pointerMoved = false;
+        interactionRef.current.downTime = Date.now();
         const pos = getMousePos(e);
         interactionRef.current.dragStart = { x: pos.screenX, y: pos.screenY };
         interactionRef.current.cameraStart = { x: cameraRef.current.x, y: cameraRef.current.y };
@@ -486,8 +488,9 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (interactionRef.current.isPointerDown && !openedCell) {
             const dx = pos.screenX - interactionRef.current.dragStart.x;
             const dy = pos.screenY - interactionRef.current.dragStart.y;
-            // Increased jitter tolerance to 15px for touchscreen kiosks
-            if (Math.abs(dx) > 15 || Math.abs(dy) > 15) interactionRef.current.pointerMoved = true;
+            
+            // Euclidean distance for smoother radial threshold
+            if (Math.hypot(dx, dy) > 10) interactionRef.current.pointerMoved = true;
 
             cameraRef.current.x = interactionRef.current.cameraStart.x - dx / cameraRef.current.zoom;
             cameraRef.current.y = interactionRef.current.cameraStart.y - dy / cameraRef.current.zoom;
@@ -501,8 +504,18 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         interactionRef.current.isPointerDown = false;
         if (openedCell) return; // Let the HTML overlay handle closing
         
-        if (!interactionRef.current.pointerMoved) {
-            const pos = getMousePos(e);
+        const pos = getMousePos(e);
+        
+        // Industry Standard "Sloppy Tap" Detection for Mobile Kiosks
+        // A valid tap allows for a small amount of physical finger "roll" (distance) and a reasonable duration
+        const timeElapsed = Date.now() - interactionRef.current.downTime;
+        const dx = pos.screenX - interactionRef.current.dragStart.x;
+        const dy = pos.screenY - interactionRef.current.dragStart.y;
+        const distance = Math.hypot(dx, dy);
+        
+        const isValidTap = distance < 25 && timeElapsed < 500;
+
+        if (isValidTap) {
             const { activeCells } = useMosaicStore.getState();
             
             let clickedCell: Cell | null = null;
