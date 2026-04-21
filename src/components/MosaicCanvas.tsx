@@ -127,7 +127,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             ctx.scale(camera.zoom, camera.zoom);
             ctx.translate(-camera.x, -camera.y);
 
-            const STRIP_HEIGHT = 120;
+            const STRIP_HEIGHT = 200;
             let screenBigW = Math.min(800, canvas.width * 0.9);
             let screenBigH = screenBigW * 0.95 + STRIP_HEIGHT;
 
@@ -609,24 +609,34 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             onClick={(e) => handleClose(e)}
                             style={{ 
                                 width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
-                                height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 120 : 880
+                                height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 200 : 960
                             }}
                          >
-                             <div className="w-full h-[120px] p-6 flex flex-col justify-center bg-white/90 backdrop-blur-md cursor-default" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-4 mb-2">
-                                    <div 
-                                        className="h-8 w-8 rounded-full border-[3px] border-[#888] flex items-center justify-center cursor-pointer hover:border-[#333] hover:bg-gray-100 transition-all"
-                                        onClick={(e) => handleClose(e)}
-                                    >
-                                        <div className="w-4 h-[3px] bg-[#888] rotate-45 absolute" />
-                                        <div className="w-4 h-[3px] bg-[#888] -rotate-45 absolute" />
+                             {/* Close Button Top-Right Corner of the Image Area */}
+                             <div 
+                                className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
+                                onClick={(e) => handleClose(e)}
+                             >
+                                <div className="w-5 h-[3px] bg-white rotate-45 absolute group-hover:scale-110" />
+                                <div className="w-5 h-[3px] bg-white -rotate-45 absolute group-hover:scale-110" />
+                             </div>
+
+                             <div className="w-full h-[200px] p-8 flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-6 mb-4 border-b border-gray-100 pb-3">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">Session Node</span>
+                                        <h3 className="font-mono text-2xl font-bold tracking-tight m-0 leading-none text-gray-900">{openedCell.hash || 'A1-B2-C3'}</h3>
                                     </div>
-                                    <h3 className="font-mono text-2xl font-bold tracking-wider m-0 leading-none">{openedCell.hash || 'a1b2c3d'}</h3>
-                                    <span className="text-gray-500 font-sans text-base ml-auto">{openedCell.time}</span>
+                                    <div className="flex flex-col ml-auto text-right">
+                                        <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1">Capture Log</span>
+                                        <span className="text-gray-600 font-mono text-sm">{openedCell.time}</span>
+                                    </div>
                                   </div>
-                                  <p className="font-sans text-sm text-gray-700 leading-snug line-clamp-3">
-                                      {openedCell.storyPanel || 'Processing neural scan... waiting for Jules.'}
-                                  </p>
+                                  <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
+                                      <p className="font-sans text-lg text-gray-800 leading-relaxed font-medium">
+                                          {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
+                                      </p>
+                                  </div>
                              </div>
                          </motion.div>
                      </motion.div>
