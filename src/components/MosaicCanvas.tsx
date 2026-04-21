@@ -359,9 +359,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                     return; // Prevent drawing anim state after complete
                 }
 
-                ctx.fillStyle = '#2a2a35';
-                ctx.fillRect(currentX, currentY, currentW, currentH);
-
                 ctx.fillStyle = `rgba(245, 245, 245, 1)`;
                 ctx.fillRect(currentX, currentY, currentW, currentH);
 
