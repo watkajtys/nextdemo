@@ -136,8 +136,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
             const dpr = window.devicePixelRatio || 1;
 
-            ctx.save();
-            ctx.scale(dpr, dpr);
+            // Reset matrix and apply DPR scale directly without needing an extra save/restore stack
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
             ctx.fillStyle = '#0f0f11';
             ctx.fillRect(0, 0, viewport.w, viewport.h);
@@ -424,7 +424,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             }
 
             ctx.restore();
-            ctx.restore(); // Restore DPR scale
             animationFrameId = requestAnimationFrame(draw);
         };
 
