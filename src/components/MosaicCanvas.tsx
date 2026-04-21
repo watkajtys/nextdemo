@@ -27,10 +27,26 @@ interface MosaicCanvasProps {
     onAnimationComplete: (cell: Cell) => void;
 }
 
+export const calculateCardDimensions = (viewportW: number, viewportH: number) => {
+    const isMobile = viewportW < 600;
+    const STRIP_HEIGHT = isMobile ? 150 : 200;
+    let screenBigW = isMobile ? (viewportW * 0.95) : Math.min(800, viewportW * 0.9);
+    let screenBigH = screenBigW * 0.95 + STRIP_HEIGHT;
+
+    // Ensure the card doesn't exceed the viewport height (handling landscape/short screens)
+    if (screenBigH > viewportH * 0.92) {
+        screenBigH = viewportH * 0.92;
+        screenBigW = (screenBigH - STRIP_HEIGHT) / 0.95;
+    }
+
+    return { width: screenBigW, height: screenBigH };
+};
+
 export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimationComplete }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [openedCell, setOpenedCell] = useState<Cell | null>(null);
+    const [windowSize, setWindowSize] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 800, h: typeof window !== 'undefined' ? window.innerHeight : 600 });
     
     // High-frequency mutable state kept in refs to avoid React re-renders
     const cameraRef = useRef<Camera>({ x: GRID_WORLD_SIZE / 2, y: GRID_WORLD_SIZE / 2, zoom: 1 });
@@ -72,6 +88,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             const dpr = window.devicePixelRatio || 1;
 
             viewportRef.current = { w: width, h: height };
+            setWindowSize({ w: width, h: height });
 
             // Physical canvas resolution
             canvas.width = width * dpr;
@@ -147,16 +164,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             ctx.scale(camera.zoom, camera.zoom);
             ctx.translate(-camera.x, -camera.y);
 
-            const isMobile = viewport.w < 600;
-            const STRIP_HEIGHT = isMobile ? 150 : 200;
-            let screenBigW = isMobile ? (viewport.w * 0.95) : Math.min(800, viewport.w * 0.9);
-            let screenBigH = screenBigW * 0.95 + STRIP_HEIGHT;
-
-            // Ensure the card doesn't exceed the viewport height (handling landscape/short screens)
-            if (screenBigH > viewport.h * 0.92) {
-                screenBigH = viewport.h * 0.92;
-                screenBigW = (screenBigH - STRIP_HEIGHT) / 0.95;
-            }
+            const { width: screenBigW, height: screenBigH } = calculateCardDimensions(viewport.w, viewport.h);
 
             const bigW = screenBigW / camera.zoom;
             const bigH = screenBigH / camera.zoom;
@@ -716,13 +724,10 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent" 
                             onClick={(e) => handleClose(e)}
-                            style={{ 
-                                width: typeof window !== 'undefined' ? (window.innerWidth < 600 ? window.innerWidth * 0.95 : Math.min(800, window.innerWidth * 0.9)) : 800, 
-                                height: typeof window !== 'undefined' ? (window.innerWidth < 600 ? (window.innerWidth * 0.95 * 0.95 + 150) : (Math.min(800, window.innerWidth * 0.9) * 0.95 + 200)) : 960,
-                                // Responsive viewport clipping protection
-                                maxHeight: typeof window !== 'undefined' ? window.innerHeight * 0.92 : 'none'
-                            }}
-                         >
+                            style={{
+                                width: calculateCardDimensions(windowSize.w, windowSize.h).width,
+                                height: calculateCardDimensions(windowSize.w, windowSize.h).height
+                            }}                         >
                              {/* Close Button Top-Right Corner of the Image Area */}
                              <div 
                                 className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
