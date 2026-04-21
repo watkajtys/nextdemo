@@ -271,15 +271,12 @@ export const PhotoboothUI: React.FC<PhotoboothUIProps> = ({ onTriggerAnimation, 
             <div className={`pointer-events-none fixed inset-0 flex items-center justify-center bg-black/95 backdrop-blur-3xl transition-all duration-500 ease-out ${(countdown !== null || flash || processing) ? 'opacity-100 z-30' : 'opacity-0 pointer-events-none -z-10'
                 }`}>
                 {/* Polaroid Frame container (Upright) */}
-                <div className={`relative flex flex-col items-center bg-[#f8f8f8] p-4 pb-20 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-in-out ${processing ? 'opacity-0 scale-90 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
+                <div className={`relative flex flex-col items-center bg-[#f8f8f8] p-4 shadow-[0_40px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-in-out ${processing ? 'opacity-0 scale-90 blur-md' : 'opacity-100 scale-100 blur-0'}`}>
                     <img
                         src={previewUrl}
                         alt="Camera Preview"
                         className="aspect-square h-[65vh] w-[65vh] max-h-[700px] max-w-[700px] scale-x-[-1] bg-black object-cover shadow-inner"
                     />
-                    <div className="absolute bottom-6 font-mono text-2xl font-bold tracking-widest text-[#2a2a2a] opacity-80">
-                        JULES AT NEXT 2026
-                    </div>
                 </div>
 
                 {/* AI Generative Wait Screen overlay */}
