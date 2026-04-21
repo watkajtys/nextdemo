@@ -659,7 +659,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (e && 'stopPropagation' in e) e.stopPropagation();
 
         // Prevent "ghost clicks" from instantly closing the modal on mobile
-        if (Date.now() - interactionRef.current.lastOpenedTime < 1000) return;
+        if (Date.now() - interactionRef.current.lastOpenedTime < 400) return;
 
         clickedCellRef.current = null;
         setOpenedCell(null);
