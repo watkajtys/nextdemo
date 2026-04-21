@@ -626,14 +626,14 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                              </div>
 
                              <div className="w-full h-[150px] sm:h-[200px] p-5 sm:p-8 flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-4 sm:gap-6 mb-3 sm:mb-4 border-b border-gray-100 pb-2 sm:pb-3">
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] sm:text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">Session Node</span>
-                                        <h3 className="font-mono text-lg sm:text-2xl font-bold tracking-tight m-0 leading-none text-gray-900">{openedCell.hash || 'A1-B2-C3'}</h3>
-                                    </div>
-                                    <div className="flex flex-col ml-auto text-right">
-                                        <span className="text-[9px] sm:text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-0.5 sm:mb-1">Capture Log</span>
-                                        <span className="text-gray-600 font-mono text-xs sm:text-sm">{openedCell.time}</span>
+                                  <div className="flex flex-col mb-3 sm:mb-4 border-b border-gray-100 pb-2 sm:pb-3">
+                                    <span className="text-[9px] sm:text-[10px] font-mono text-gray-400 uppercase tracking-widest mb-1 sm:mb-1.5">Neural Artifact — Jules @ NEXT 2026</span>
+                                    <div className="flex items-center gap-3 font-mono text-sm sm:text-base font-bold text-gray-900">
+                                        <span className="tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {(openedCell.hash || 'A1-B2-C3').replace('/portraits/', '').replace('.json', '').replace('.jpg', '').replace('.png', '')}
+                                        </span>
+                                        <span className="text-gray-300 font-light">|</span>
+                                        <span className="text-gray-500 font-medium whitespace-nowrap">{openedCell.time}</span>
                                     </div>
                                   </div>
                                   <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
