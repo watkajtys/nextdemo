@@ -587,22 +587,21 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="absolute inset-0 flex items-center justify-center p-4 z-20 bg-black/40 cursor-zoom-out"
-                        onClick={() => handleClose()}
+                        className="absolute inset-0 flex items-center justify-center p-4 z-20 bg-black/40 pointer-events-none"
                      >
                          <motion.div 
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-default" 
+                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent" 
                             onClick={(e) => handleClose(e)}
                             style={{ 
                                 width: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) : 800, 
                                 height: typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.9) * 0.95 + 120 : 880
                             }}
                          >
-                             <div className="w-full h-[120px] p-6 flex flex-col justify-center bg-white/90 backdrop-blur-md">
+                             <div className="w-full h-[120px] p-6 flex flex-col justify-center bg-white/90 backdrop-blur-md cursor-default" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center gap-4 mb-2">
                                     <div 
                                         className="h-8 w-8 rounded-full border-[3px] border-[#888] flex items-center justify-center cursor-pointer hover:border-[#333] hover:bg-gray-100 transition-all"
