@@ -44,6 +44,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         dragStart: { x: 0, y: 0 },
         cameraStart: { x: 0, y: 0 },
         downTime: 0,
+        lastOpenedTime: 0,
+        activePointers: new Map<number, { x: number, y: number }>(),
         initialPinchDistance: null as number | null,
         initialPinchZoom: 1
     });
@@ -418,25 +420,23 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         };
     }, [animState, onAnimationComplete]);
 
+    const [debugLogs, setDebugLogs] = useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        setDebugLogs(prev => {
+            const next = [...prev, msg];
+            if (next.length > 5) next.shift();
+            return next;
+        });
+    };
+
     // Input handlers
-    const getMousePos = (e: React.MouseEvent | MouseEvent | React.TouchEvent | TouchEvent | React.PointerEvent | PointerEvent) => {
+    const getMousePos = (clientX: number, clientY: number) => {
         const canvas = canvasRef.current;
-        if (!canvas) return { screenX: 0, screenY: 0, worldX: 0, worldY: 0 };
-        
+        if (!canvas) return null;
+
         const rect = canvas.getBoundingClientRect();
-        let clientX = 0, clientY = 0;
-
-        if ('touches' in e && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else if ('changedTouches' in e && e.changedTouches && e.changedTouches.length > 0) {
-            clientX = e.changedTouches[0].clientX;
-            clientY = e.changedTouches[0].clientY;
-        } else if ('clientX' in e) {
-            clientX = (e as MouseEvent).clientX;
-            clientY = (e as MouseEvent).clientY;
-        }
-
+        
         const screenX = clientX - rect.left;
         const screenY = clientY - rect.top;
 
@@ -450,7 +450,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const handleWheel = (e: React.WheelEvent) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        
+
         const zoomSensitivity = 0.001;
         const delta = -e.deltaY * zoomSensitivity;
 
@@ -460,133 +460,79 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         const newZoom = Math.max(minZoom, Math.min(cameraRef.current.zoom * (1 + delta), 50));
 
-        const pos = getMousePos(e);
+        const pos = getMousePos(e.clientX, e.clientY);
+        if (!pos) return;
         cameraRef.current.x = pos.worldX - (pos.screenX - canvas.width / 2) / newZoom;
         cameraRef.current.y = pos.worldY - (pos.screenY - canvas.height / 2) / newZoom;
         cameraRef.current.zoom = newZoom;
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
-        // Prevent panning the background while a portrait is open
-        if (openedCell) return;
+        // Prevent default to stop browser from attempting native scrolling/zooming gestures
+        // and triggering the synthetic mouse event fallback pipeline on mobile.
+        // NOTE: e.preventDefault() in pointerdown can break native click events, but we are capturing the pointer.
         
-        interactionRef.current.isPointerDown = true;
-        interactionRef.current.pointerMoved = false;
-        interactionRef.current.downTime = Date.now();
-        const pos = getMousePos(e);
-        interactionRef.current.dragStart = { x: pos.screenX, y: pos.screenY };
-        interactionRef.current.cameraStart = { x: cameraRef.current.x, y: cameraRef.current.y };
+        // Track all pointers for multi-touch
+        interactionRef.current.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         
         if (canvasRef.current) {
-             canvasRef.current.setPointerCapture(e.pointerId);
+            canvasRef.current.setPointerCapture(e.pointerId);
         }
-    };
 
-    const handlePointerMove = (e: React.PointerEvent) => {
-        const pos = getMousePos(e);
+        // Prevent panning the background while a portrait is open
+        if (openedCell) return;
 
-        if (interactionRef.current.isPointerDown && !openedCell) {
-            const dx = pos.screenX - interactionRef.current.dragStart.x;
-            const dy = pos.screenY - interactionRef.current.dragStart.y;
-            
-            // Euclidean distance for smoother radial threshold
-            if (Math.hypot(dx, dy) > 10) interactionRef.current.pointerMoved = true;
+        const pos = getMousePos(e.clientX, e.clientY);
+        if (!pos) return;
 
-            cameraRef.current.x = interactionRef.current.cameraStart.x - dx / cameraRef.current.zoom;
-            cameraRef.current.y = interactionRef.current.cameraStart.y - dy / cameraRef.current.zoom;
-        } else if (e.pointerType === 'mouse') {
-            mouseRef.current.x = pos.worldX;
-            mouseRef.current.y = pos.worldY;
-        }
-    };
-
-    const handlePointerUp = (e: React.PointerEvent) => {
-        interactionRef.current.isPointerDown = false;
-        if (openedCell) return; // Let the HTML overlay handle closing
-        
-        const pos = getMousePos(e);
-        
-        // Industry Standard "Sloppy Tap" Detection for Mobile Kiosks
-        // A valid tap allows for a small amount of physical finger "roll" (distance) and a reasonable duration
-        const timeElapsed = Date.now() - interactionRef.current.downTime;
-        const dx = pos.screenX - interactionRef.current.dragStart.x;
-        const dy = pos.screenY - interactionRef.current.dragStart.y;
-        const distance = Math.hypot(dx, dy);
-        
-        const isValidTap = distance < 25 && timeElapsed < 500;
-
-        if (isValidTap) {
-            const { activeCells } = useMosaicStore.getState();
-            
-            let clickedCell: Cell | null = null;
-            for (let i = activeCells.length - 1; i >= 0; i--) {
-                const cell = activeCells[i];
-                if (pos.worldX >= cell.x && pos.worldX <= cell.x + cell.w &&
-                    pos.worldY >= cell.y && pos.worldY <= cell.y + cell.h) {
-                    clickedCell = cell;
-                    break;
-                }
-            }
-
-            if (clickedCell === clickedCellRef.current) {
-                // If clicking the already opened cell or empty space, close it
-                clickedCellRef.current = null;
-                setOpenedCell(null);
-            } else {
-                // Otherwise open the new cell (or switch to it)
-                clickedCellRef.current = clickedCell;
-                setOpenedCell(clickedCell);
-            }
-        }
-    };
-
-    const handleClose = (e?: React.MouseEvent | KeyboardEvent) => {
-        if (e && 'stopPropagation' in e) e.stopPropagation();
-        clickedCellRef.current = null;
-        setOpenedCell(null);
-    };
-
-    // Add Escape key support for accessibility and UX best practices
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && openedCell) {
-                handleClose(e);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [openedCell]);
-
-    const handlePointerLeave = () => {
-        interactionRef.current.isPointerDown = false;
-        mouseRef.current.x = -1000;
-        mouseRef.current.y = -1000;
-    };
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        mouseRef.current.x = -1000;
-        mouseRef.current.y = -1000;
-        if (e.touches.length === 2) {
+        if (interactionRef.current.activePointers.size === 1) {
+            addLog(`PointerDown [${e.pointerType}]: ${Math.round(e.clientX)},${Math.round(e.clientY)}`);
+            interactionRef.current.isPointerDown = true;
+            interactionRef.current.pointerMoved = false;
+            interactionRef.current.downTime = Date.now();
+            interactionRef.current.dragStart = { x: pos.screenX, y: pos.screenY };
+            interactionRef.current.cameraStart = { x: cameraRef.current.x, y: cameraRef.current.y };
+        } else if (interactionRef.current.activePointers.size === 2) {
+            // Switch from panning to pinch zoom
             interactionRef.current.isPointerDown = false;
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const pointers = Array.from(interactionRef.current.activePointers.values()) as {x: number, y: number}[];
+            const dx = pointers[0].x - pointers[1].x;
+            const dy = pointers[0].y - pointers[1].y;
             interactionRef.current.initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
             interactionRef.current.initialPinchZoom = cameraRef.current.zoom;
         }
     };
 
-    const handleTouchMove = (e: React.TouchEvent) => {
-        if (e.touches.length === 2 && interactionRef.current.initialPinchDistance) {
+    const handlePointerCancel = (e: React.PointerEvent) => {
+        addLog(`PointerCancel [${e.pointerType}]`);
+        interactionRef.current.activePointers.delete(e.pointerId);
+        if (canvasRef.current && canvasRef.current.hasPointerCapture(e.pointerId)) {
+             canvasRef.current.releasePointerCapture(e.pointerId);
+        }
+        interactionRef.current.isPointerDown = false;
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        // Ignore spurious 0,0 pointermove events from Android Chrome on quick taps
+        if (e.clientX === 0 && e.clientY === 0) return;
+
+        if (interactionRef.current.activePointers.has(e.pointerId)) {
+            interactionRef.current.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        }
+
+        // Handle multi-touch pinch zoom
+        if (interactionRef.current.activePointers.size === 2 && interactionRef.current.initialPinchDistance) {
             const canvas = canvasRef.current;
             if (!canvas) return;
 
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const pointers = Array.from(interactionRef.current.activePointers.values()) as {x: number, y: number}[];
+            const dx = pointers[0].x - pointers[1].x;
+            const dy = pointers[0].y - pointers[1].y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             const zoomFactor = dist / interactionRef.current.initialPinchDistance;
 
-            const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const cx = (pointers[0].x + pointers[1].x) / 2;
+            const cy = (pointers[0].y + pointers[1].y) / 2;
 
             const rect = canvas.getBoundingClientRect();
             const screenX = cx - rect.left;
@@ -604,22 +550,147 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             cameraRef.current.x = worldX - (screenX - canvas.width / 2) / newZoom;
             cameraRef.current.y = worldY - (screenY - canvas.height / 2) / newZoom;
             cameraRef.current.zoom = newZoom;
+            return;
         }
+
+        const pos = getMousePos(e.clientX, e.clientY);
+        if (!pos) return;
+
+        // Hover tracking for mouse
+        if (e.pointerType === 'mouse' && !interactionRef.current.isPointerDown) {
+            mouseRef.current.x = pos.worldX;
+            mouseRef.current.y = pos.worldY;
+        }
+
+        // Single-touch panning
+        if (interactionRef.current.isPointerDown && !openedCell && interactionRef.current.activePointers.size === 1) {
+            const dx = pos.screenX - interactionRef.current.dragStart.x;
+            const dy = pos.screenY - interactionRef.current.dragStart.y;
+
+            // Strict slop radius threshold (15px) for high-DPI screens
+            if (!interactionRef.current.pointerMoved && Math.hypot(dx, dy) > 15) {
+                addLog(`PointerMoved threshold broken (${Math.round(Math.hypot(dx, dy))}px)`);
+                interactionRef.current.pointerMoved = true;
+            }
+
+            if (interactionRef.current.pointerMoved) {
+                cameraRef.current.x = interactionRef.current.cameraStart.x - dx / cameraRef.current.zoom;
+                cameraRef.current.y = interactionRef.current.cameraStart.y - dy / cameraRef.current.zoom;
+            }
+        }
+    };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        interactionRef.current.activePointers.delete(e.pointerId);
+
+        if (canvasRef.current && canvasRef.current.hasPointerCapture(e.pointerId)) {
+             canvasRef.current.releasePointerCapture(e.pointerId);
+        }
+
+        // If finishing a pinch, don't trigger tap
+        if (interactionRef.current.activePointers.size > 0) {
+            return;
+        }
+
+        const wasPointerDown = interactionRef.current.isPointerDown;
+        interactionRef.current.isPointerDown = false;
+
+        // If gesture wasn't a valid primary pointer sequence, abort
+        if (!wasPointerDown) {
+            addLog(`Tap aborted: no pointer down state`);
+            return;
+        }
+
+        // Let the HTML overlay handle closing if something is open
+        if (openedCell) return; 
+
+        // If they dragged their finger past the slop radius, it's a pan
+        if (interactionRef.current.pointerMoved) {
+            addLog(`Tap aborted: pointer was moved`);
+            return;
+        }
+
+        // Enforce time threshold to distinguish tap from drag-and-hold
+        const timeElapsed = Date.now() - interactionRef.current.downTime;
+        if (timeElapsed > 750) {
+            addLog(`Tap aborted: too long (${timeElapsed}ms)`);
+            return;
+        }
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        // Use strictly captured coordinates to avoid missing pointers
+        const screenX = interactionRef.current.dragStart.x;
+        const screenY = interactionRef.current.dragStart.y;
+
+        const worldX = (screenX - canvas.width / 2) / cameraRef.current.zoom + cameraRef.current.x;
+        const worldY = (screenY - canvas.height / 2) / cameraRef.current.zoom + cameraRef.current.y;
+
+        const { activeCells } = useMosaicStore.getState();
+
+        let clickedCell: Cell | null = null;
+        for (let i = activeCells.length - 1; i >= 0; i--) {
+            const cell = activeCells[i];
+            if (worldX >= cell.x && worldX <= cell.x + cell.w &&
+                worldY >= cell.y && worldY <= cell.y + cell.h) {
+                clickedCell = cell;
+                break;
+            }
+        }
+
+        if (clickedCell) {
+            addLog(`Tap successful! Cell found.`);
+            interactionRef.current.lastOpenedTime = Date.now();
+            clickedCellRef.current = clickedCell;
+            setOpenedCell(clickedCell);
+        } else {
+            addLog(`Tap successful, empty space.`);
+        }
+    };
+
+    const handleClose = (e?: React.MouseEvent | KeyboardEvent) => {
+        if (e && 'stopPropagation' in e) e.stopPropagation();
+
+        // Prevent "ghost clicks" from instantly closing the modal on mobile
+        if (Date.now() - interactionRef.current.lastOpenedTime < 1000) return;
+
+        clickedCellRef.current = null;
+        setOpenedCell(null);
+    };
+    // Add Escape key support for accessibility and UX best practices
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && openedCell) {
+                handleClose(e);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [openedCell]);
+
+    const handlePointerLeave = (e: React.PointerEvent) => {
+        handlePointerUp(e);
+        mouseRef.current.x = -1000;
+        mouseRef.current.y = -1000;
     };
 
     return (
         <div ref={containerRef} className="absolute top-0 left-0 w-full h-full z-10 overflow-hidden">
             <canvas
                 ref={canvasRef}
-                className="w-full h-full bg-[#0f0f11] touch-none"
-                style={{ WebkitTapHighlightColor: 'transparent' }}
+                className="w-full h-full bg-[#0f0f11] touch-none cursor-pointer"
+                style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'none' }}
+                onClick={(e) => {
+                    // Dummy handler to ensure iOS Safari treats the canvas as "clickable"
+                    // and generates standard pointer events for short taps.
+                }}
                 onWheel={handleWheel}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
                 onPointerLeave={handlePointerLeave}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
             />
             {/* Story Panel HTML Overlay perfectly mapped to canvas active card space */}
             <AnimatePresence>
@@ -666,6 +737,13 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                      </motion.div>
                  )}
             </AnimatePresence>
+
+            {/* Debug UI for tracking interactions on mobile devices */}
+            <div className="pointer-events-none fixed bottom-0 left-0 p-2 z-50 flex flex-col gap-1 text-[10px] font-mono text-green-400 bg-black/60 rounded-tr-lg">
+                {debugLogs.map((log, i) => (
+                    <div key={i}>{log}</div>
+                ))}
+            </div>
         </div>
     );
 };
