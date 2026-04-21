@@ -522,11 +522,22 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         }
     };
 
-    const handleClose = (e?: React.MouseEvent) => {
-        if (e) e.stopPropagation();
+    const handleClose = (e?: React.MouseEvent | KeyboardEvent) => {
+        if (e && 'stopPropagation' in e) e.stopPropagation();
         clickedCellRef.current = null;
         setOpenedCell(null);
     };
+
+    // Add Escape key support for accessibility and UX best practices
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && openedCell) {
+                handleClose(e);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [openedCell]);
 
     const handlePointerLeave = () => {
         interactionRef.current.isPointerDown = false;
