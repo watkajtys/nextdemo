@@ -440,11 +440,17 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         const screenX = clientX - rect.left;
         const screenY = clientY - rect.top;
 
-        const camera = cameraRef.current;
-        const worldX = (screenX - canvas.width / 2) / camera.zoom + camera.x;
-        const worldY = (screenY - canvas.height / 2) / camera.zoom + camera.y;
+        // Scale CSS coordinates to internal canvas resolution to prevent hitbox drift
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const canvasX = screenX * scaleX;
+        const canvasY = screenY * scaleY;
 
-        return { screenX, screenY, worldX, worldY };
+        const camera = cameraRef.current;
+        const worldX = (canvasX - canvas.width / 2) / camera.zoom + camera.x;
+        const worldY = (canvasY - canvas.height / 2) / camera.zoom + camera.y;
+
+        return { canvasX, canvasY, worldX, worldY };
     };
 
     const handleWheel = (e: React.WheelEvent) => {
@@ -462,8 +468,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         const pos = getMousePos(e.clientX, e.clientY);
         if (!pos) return;
-        cameraRef.current.x = pos.worldX - (pos.screenX - canvas.width / 2) / newZoom;
-        cameraRef.current.y = pos.worldY - (pos.screenY - canvas.height / 2) / newZoom;
+        cameraRef.current.x = pos.worldX - (pos.canvasX - canvas.width / 2) / newZoom;
+        cameraRef.current.y = pos.worldY - (pos.canvasY - canvas.height / 2) / newZoom;
         cameraRef.current.zoom = newZoom;
     };
 
@@ -490,7 +496,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             interactionRef.current.isPointerDown = true;
             interactionRef.current.pointerMoved = false;
             interactionRef.current.downTime = Date.now();
-            interactionRef.current.dragStart = { x: pos.screenX, y: pos.screenY };
+            interactionRef.current.dragStart = { x: pos.canvasX, y: pos.canvasY };
             interactionRef.current.cameraStart = { x: cameraRef.current.x, y: cameraRef.current.y };
         } else if (interactionRef.current.activePointers.size === 2) {
             // Switch from panning to pinch zoom
@@ -537,9 +543,13 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
             const rect = canvas.getBoundingClientRect();
             const screenX = cx - rect.left;
             const screenY = cy - rect.top;
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const canvasX = screenX * scaleX;
+            const canvasY = screenY * scaleY;
 
-            const worldX = (screenX - canvas.width / 2) / cameraRef.current.zoom + cameraRef.current.x;
-            const worldY = (screenY - canvas.height / 2) / cameraRef.current.zoom + cameraRef.current.y;
+            const worldX = (canvasX - canvas.width / 2) / cameraRef.current.zoom + cameraRef.current.x;
+            const worldY = (canvasY - canvas.height / 2) / cameraRef.current.zoom + cameraRef.current.y;
 
             const minZoomX = canvas.width / (SVG_WORLD_W * 1.1);
             const minZoomY = canvas.height / (SVG_WORLD_H * 1.1);
@@ -547,8 +557,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
             const newZoom = Math.max(minZoom, Math.min(interactionRef.current.initialPinchZoom * zoomFactor, 50));
 
-            cameraRef.current.x = worldX - (screenX - canvas.width / 2) / newZoom;
-            cameraRef.current.y = worldY - (screenY - canvas.height / 2) / newZoom;
+            cameraRef.current.x = worldX - (canvasX - canvas.width / 2) / newZoom;
+            cameraRef.current.y = worldY - (canvasY - canvas.height / 2) / newZoom;
             cameraRef.current.zoom = newZoom;
             return;
         }
@@ -564,8 +574,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
 
         // Single-touch panning
         if (interactionRef.current.isPointerDown && !openedCell && interactionRef.current.activePointers.size === 1) {
-            const dx = pos.screenX - interactionRef.current.dragStart.x;
-            const dy = pos.screenY - interactionRef.current.dragStart.y;
+            const dx = pos.canvasX - interactionRef.current.dragStart.x;
+            const dy = pos.canvasY - interactionRef.current.dragStart.y;
 
             // Strict slop radius threshold (15px) for high-DPI screens
             if (!interactionRef.current.pointerMoved && Math.hypot(dx, dy) > 15) {
@@ -621,11 +631,11 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (!canvas) return;
 
         // Use strictly captured coordinates to avoid missing pointers
-        const screenX = interactionRef.current.dragStart.x;
-        const screenY = interactionRef.current.dragStart.y;
+        const canvasX = interactionRef.current.dragStart.x;
+        const canvasY = interactionRef.current.dragStart.y;
 
-        const worldX = (screenX - canvas.width / 2) / cameraRef.current.zoom + cameraRef.current.x;
-        const worldY = (screenY - canvas.height / 2) / cameraRef.current.zoom + cameraRef.current.y;
+        const worldX = (canvasX - canvas.width / 2) / cameraRef.current.zoom + cameraRef.current.x;
+        const worldY = (canvasY - canvas.height / 2) / cameraRef.current.zoom + cameraRef.current.y;
 
         const { activeCells } = useMosaicStore.getState();
 
