@@ -557,6 +557,17 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         ctx.fillText(`SESSION: ${displayId}`, textX, textCenter + (footerHeight * 0.15), maxWidth);
         ctx.fillText(`CREATED: ${timeStr}`, textX, textCenter + (footerHeight * 0.25), maxWidth);
 
+        // --- MANDATORY 1-BIT THRESHOLDING FOR THERMAL PRINTER ---
+        // Ensure the final print label contains no grayscale pixels from anti-aliased text or scaled QR codes
+        const printImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const printData = printImageData.data;
+        for (let i = 0; i < printData.length; i += 4) {
+            const brightness = (printData[i] + printData[i+1] + printData[i+2]) / 3;
+            const val = brightness > 128 ? 255 : 0;
+            printData[i] = printData[i+1] = printData[i+2] = val;
+        }
+        ctx.putImageData(printImageData, 0, 0);
+
         const labelBuffer = canvas.toBuffer('image/png');
         setImmediate(async () => {
             try {
