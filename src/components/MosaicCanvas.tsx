@@ -654,7 +654,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         }
 
         if (clickedCell) {
-
+            if (navigator.vibrate) navigator.vibrate(10);
             interactionRef.current.lastOpenedTime = Date.now();
             clickedCellRef.current = clickedCell;
             setOpenedCell(clickedCell);
@@ -669,6 +669,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         // Prevent "ghost clicks" from instantly closing the modal on mobile
         if (Date.now() - interactionRef.current.lastOpenedTime < 400) return;
 
+        if (navigator.vibrate) navigator.vibrate(20);
         clickedCellRef.current = null;
         setOpenedCell(null);
     };
@@ -737,7 +738,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                          >
                              {/* Close Button Top-Right Corner of the Image Area */}
                              <div 
-                                className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
+                                className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group before:absolute before:-inset-3 before:content-['']"
                                 onClick={(e) => handleClose(e)}
                              >
                                 <div className="w-4 sm:w-5 h-[3px] bg-white rotate-45 absolute group-hover:scale-110" />
