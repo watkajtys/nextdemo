@@ -664,7 +664,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         }
     };
 
-    const handleClose = (e?: React.MouseEvent | KeyboardEvent) => {
+    const handleClose = (e?: React.MouseEvent | KeyboardEvent, skipHistoryBack = false) => {
         if (e && 'stopPropagation' in e) e.stopPropagation();
 
         // Prevent "ghost clicks" from instantly closing the modal on mobile
@@ -674,16 +674,35 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         clickedCellRef.current = null;
         setOpenedCell(null);
         setIsStoryExpanded(false);
+
+        if (!skipHistoryBack && typeof window !== 'undefined' && window.history.state?.modalOpen) {
+            window.history.back();
+        }
     };
-    // Add Escape key support for accessibility and UX best practices
+
+    // Hardware Back Button and Escape key support for accessibility and UX best practices
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && openedCell) {
                 handleClose(e);
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+
+        const handlePopState = () => {
+            if (openedCell) {
+                handleClose(undefined, true);
+            }
+        };
+
+        if (openedCell && typeof window !== 'undefined') {
+            window.history.pushState({ modalOpen: true }, '');
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('popstate', handlePopState);
+            return () => {
+                window.removeEventListener('keydown', handleKeyDown);
+                window.removeEventListener('popstate', handlePopState);
+            };
+        }
     }, [openedCell]);
 
     const handlePointerLeave = (e: React.PointerEvent) => {
@@ -783,7 +802,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                 <div className="overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-8 sm:pb-[max(2rem,env(safe-area-inset-bottom))] custom-scrollbar flex-1 overscroll-contain select-text">
                                     <div className="space-y-6">
                                         <p className="font-sans text-base sm:text-lg text-gray-800 leading-relaxed font-medium">
-                                            {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
+                                            {openedCell.storyPanel || 'Jules is still building worlds'}
                                         </p>
 
                                         <AnimatePresence>
