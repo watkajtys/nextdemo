@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMosaicStore } from '../store/useMosaicStore';
 import {
     GRID_WORLD_SIZE,
@@ -47,7 +47,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const containerRef = useRef<HTMLDivElement>(null);
     const [openedCell, setOpenedCell] = useState<Cell | null>(null);
     const [isStoryExpanded, setIsStoryExpanded] = useState(false);
-    const dragControls = useDragControls();
     const [windowSize, setWindowSize] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 800, h: typeof window !== 'undefined' ? window.innerHeight : 600 });
     
     // High-frequency mutable state kept in refs to avoid React re-renders
@@ -754,12 +753,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                 onClick={(e) => e.stopPropagation()}
                                 animate={{ height: isStoryExpanded ? '100%' : (windowSize.w < 600 ? '150px' : '200px') }}
                                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                                drag="y"
-                                dragControls={dragControls}
-                                dragListener={false}
-                                dragConstraints={{ top: 0, bottom: 0 }}
-                                dragElastic={0.2}
-                                onDragEnd={(e, info) => {
+                                onPanEnd={(e, info) => {
                                     const threshold = 50;
                                     const velocityThreshold = 500;
                                     if (info.offset.y < -threshold || info.velocity.y < -velocityThreshold) {
@@ -774,7 +768,6 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                 {/* Drag handle for expanding/collapsing */}
                                 <div 
                                     className="w-full pt-3 pb-2 flex items-center justify-center cursor-pointer shrink-0 touch-none"
-                                    onPointerDown={(e) => dragControls.start(e)}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setIsStoryExpanded(prev => !prev);
