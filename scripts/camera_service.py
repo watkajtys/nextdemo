@@ -74,17 +74,18 @@ def preview():
 def capture():
     """
     Triggers a high-res capture. 
-    By using the same camera_operation_lock, we ensure we don't 
-    interrupt the sensor while the worker is grabbing a frame.
+    By returning the last frame directly from memory, we avoid 
+    hardware deadlocks and achieve true zero shutter lag.
     """
-    stream = io.BytesIO()
     try:
-        with camera_operation_lock:
-            # We take a fresh capture from the sensor for maximum quality
-            picam2.capture_file(stream, format='jpeg')
-        
-        stream.seek(0)
-        print("📸 High-res capture successful")
+        with frame_lock:
+            frame = last_frame
+            
+        if frame is None:
+            return "Camera not ready", 500
+            
+        stream = io.BytesIO(frame)
+        print("📸 Instant capture successful from memory buffer")
         return send_file(stream, mimetype='image/jpeg')
     except Exception as e:
         print(f"❌ Capture error: {e}")
