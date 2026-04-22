@@ -36,6 +36,23 @@ if command -v rpi-eeprom-config &> /dev/null; then
     fi
 fi
 
+echo "🔌 Disabling USB Auto-Suspend to prevent printer/camera flapping..."
+# 1. Apply runtime fix to current devices so they don't drop during this boot
+for f in /sys/bus/usb/devices/*/power/autosuspend; do 
+    sudo -n sh -c "echo -1 > $f" 2>/dev/null || true
+done
+for f in /sys/bus/usb/devices/*/power/control; do 
+    sudo -n sh -c "echo on > $f" 2>/dev/null || true
+done
+
+# 2. Apply persistent kernel fix if not already present
+if [ -f /boot/firmware/cmdline.txt ]; then
+    if ! grep -q "usbcore.autosuspend=-1" /boot/firmware/cmdline.txt; then
+        echo "⚙️ Adding usbcore.autosuspend=-1 to kernel cmdline..."
+        sudo -n sed -i 's/$/ usbcore.autosuspend=-1/' /boot/firmware/cmdline.txt || true
+    fi
+fi
+
 # Bulletproof: Kill any zombie processes from previous crashed runs before starting
 echo "🧹 Cleaning up old processes..."
 pkill -f "chromium" || true
