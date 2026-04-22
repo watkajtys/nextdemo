@@ -13,6 +13,19 @@ last_frame = None
 last_frame_time = time.time()
 frame_lock = threading.Lock()
 camera_operation_lock = threading.Lock()
+is_paused = False
+
+@app.route('/pause', methods=['POST'])
+def pause():
+    global is_paused
+    is_paused = True
+    return "ok"
+
+@app.route('/resume', methods=['POST'])
+def resume():
+    global is_paused
+    is_paused = False
+    return "ok"
 
 def watchdog_worker():
     """
@@ -25,7 +38,7 @@ def watchdog_worker():
     while True:
         time.sleep(1)
         # Give the camera 5 seconds to initially start up before checking
-        if time.time() - last_frame_time > 3.0 and last_frame is not None:
+        if time.time() - last_frame_time > 3.0 and last_frame is not None and not is_paused:
             print("❌ [WATCHDOG] Camera hardware silently deadlocked or disconnected! Forcing reboot.")
             os._exit(1)
 
@@ -34,10 +47,16 @@ def camera_worker():
     Background thread that constantly pulls frames from the camera.
     This is MUCH more efficient than calling capture_file in a loop.
     """
-    global last_frame, last_frame_time
+    global last_frame, last_frame_time, is_paused
     consecutive_errors = 0
     
     while True:
+        if is_paused:
+            time.sleep(0.5)
+            # Prevent watchdog from firing by updating the timestamp while paused
+            last_frame_time = time.time()
+            continue
+            
         try:
             # capture_file(format='jpeg') on the main stream is fast if the camera is already running
             stream = io.BytesIO()

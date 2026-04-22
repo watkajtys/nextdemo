@@ -577,9 +577,16 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
             try {
                 const printer = await printerHardware.find();
                 if (printer) {
-                    await printerHardware.fix(printer.name);
-                    await printerHardware.print(printer.name, labelBuffer, { fit: true, media: 'w288h432' });
-                    await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
+                    try {
+                        console.log('⏸️ Pausing camera stream to prevent USB power spike during print...');
+                        await fetch(`http://127.0.0.1:5000/pause`, { method: 'POST' }).catch(() => {});
+                        await printerHardware.fix(printer.name);
+                        await printerHardware.print(printer.name, labelBuffer, { fit: true, media: 'w288h432' });
+                        await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
+                    } finally {
+                        console.log('▶️ Resuming camera stream...');
+                        await fetch(`http://127.0.0.1:5000/resume`, { method: 'POST' }).catch(() => {});
+                    }
                 }
             } catch (e) { console.error('❌ [Hardware] Print failed:', e); }
         });
