@@ -519,7 +519,7 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         ctx.stroke();
 
         // High error correction for robust scanning on thermal paper
-        const qrBuffer = await QRCode.toBuffer(`https://watkajtys.github.io/nextdemo/?portrait=${portraitId}`, {
+        const qrBuffer = await QRCode.toBuffer(`https://jules.google.com/earlyaccess`, {
             errorCorrectionLevel: 'H',
             margin: 1
         });
