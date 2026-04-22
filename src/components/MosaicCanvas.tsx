@@ -45,6 +45,7 @@ export const calculateCardDimensions = (viewportW: number, viewportH: number) =>
 export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimationComplete }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
     const [openedCell, setOpenedCell] = useState<Cell | null>(null);
     const [isStoryExpanded, setIsStoryExpanded] = useState(false);
     const [windowSize, setWindowSize] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 800, h: typeof window !== 'undefined' ? window.innerHeight : 600 });
@@ -695,6 +696,9 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         };
 
         if (openedCell && typeof window !== 'undefined') {
+            // Focus the modal for screen readers and keyboard navigation
+            modalRef.current?.focus();
+
             window.history.pushState({ modalOpen: true }, '');
             window.addEventListener('keydown', handleKeyDown);
             window.addEventListener('popstate', handlePopState);
@@ -715,6 +719,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         <div ref={containerRef} className="absolute top-0 left-0 w-full h-full z-10 overflow-hidden">
             <canvas
                 ref={canvasRef}
+                aria-hidden={!!openedCell}
+                tabIndex={openedCell ? -1 : 0}
                 className="w-full h-full bg-[#0f0f11] touch-none cursor-pointer"
                 style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'none' }}
                 onClick={(e) => {
@@ -746,6 +752,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         onClick={() => handleClose()}
                      >
                          <motion.div 
+                            ref={modalRef}
+                            tabIndex={-1}
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
