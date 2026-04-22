@@ -733,8 +733,8 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             role="dialog"
                             aria-modal="true"
-                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent select-none" 
-                            onClick={(e) => handleClose(e)}
+                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-default bg-transparent select-none" 
+                            onClick={(e) => e.stopPropagation()}
                             style={{ 
                                 width: calculateCardDimensions(windowSize.w, windowSize.h).width, 
                                 height: calculateCardDimensions(windowSize.w, windowSize.h).height
