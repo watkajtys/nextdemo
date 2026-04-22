@@ -46,6 +46,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [openedCell, setOpenedCell] = useState<Cell | null>(null);
+    const [isStoryExpanded, setIsStoryExpanded] = useState(false);
     const [windowSize, setWindowSize] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 800, h: typeof window !== 'undefined' ? window.innerHeight : 600 });
     
     // High-frequency mutable state kept in refs to avoid React re-renders
@@ -672,6 +673,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
         if (navigator.vibrate) navigator.vibrate(20);
         clickedCellRef.current = null;
         setOpenedCell(null);
+        setIsStoryExpanded(false);
     };
     // Add Escape key support for accessibility and UX best practices
     useEffect(() => {
@@ -745,13 +747,59 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                 <div className="w-4 sm:w-5 h-[3px] bg-white -rotate-45 absolute group-hover:scale-110" />
                              </div>
 
-                             <div className="w-full h-[150px] sm:h-[200px] p-5 sm:p-8 flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                                  <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
-                                      <p className="font-sans text-base sm:text-lg text-gray-800 leading-relaxed font-medium">
-                                          {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
-                                      </p>
-                                  </div>
-                             </div>
+                             <motion.div 
+                                layout
+                                className="w-full flex flex-col justify-start bg-white/95 backdrop-blur-xl cursor-default border-t border-gray-200 z-40 overflow-hidden relative"
+                                onClick={(e) => e.stopPropagation()}
+                                animate={{ height: isStoryExpanded ? '100%' : (windowSize.w < 600 ? '150px' : '200px') }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                             >
+                                {/* Drag handle for expanding/collapsing */}
+                                <div 
+                                    className="w-full pt-3 pb-2 flex items-center justify-center cursor-pointer shrink-0"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsStoryExpanded(prev => !prev);
+                                        if (navigator.vibrate) navigator.vibrate(10);
+                                    }}
+                                >
+                                    <div className="w-12 h-1.5 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" />
+                                </div>
+
+                                <div className="overflow-y-auto px-5 pb-5 sm:px-8 sm:pb-8 custom-scrollbar flex-1">
+                                    <div className="space-y-6">
+                                        <p className="font-sans text-base sm:text-lg text-gray-800 leading-relaxed font-medium">
+                                            {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
+                                        </p>
+
+                                        <AnimatePresence>
+                                            {isStoryExpanded && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    className="space-y-4 pt-4 border-t border-gray-200/60"
+                                                >
+                                                    {openedCell.julesSessionId && (
+                                                        <div>
+                                                            <span className="text-xs uppercase tracking-wider text-gray-500 font-bold mb-1 block">Session ID</span>
+                                                            <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">{openedCell.julesSessionId}</code>
+                                                        </div>
+                                                    )}
+                                                    {openedCell.julesThoughtProcess && (
+                                                        <div>
+                                                            <span className="text-xs uppercase tracking-wider text-gray-500 font-bold mb-2 block">Jules Terminal Output</span>
+                                                            <div className="bg-[#111] rounded-lg p-4 font-mono text-[10px] sm:text-xs text-green-400 leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                                {openedCell.julesThoughtProcess}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+                             </motion.div>
                          </motion.div>
                      </motion.div>
                  )}
