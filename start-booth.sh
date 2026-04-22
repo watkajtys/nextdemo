@@ -14,6 +14,28 @@ if read -t 5 -n 1; then
 fi
 echo -e "\n🚀 Proceeding with startup sequence..."
 
+echo "⚡ Checking USB Power Limits in EEPROM..."
+if command -v rpi-eeprom-config &> /dev/null; then
+    # Use sudo -n so it doesn't freeze asking for a password if the user lacks permissions
+    if ! sudo -n rpi-eeprom-config 2>/dev/null | grep -q "PSU_MAX_CURRENT=5000"; then
+        echo "⚠️  USB Power artificially throttled! Unlocking 1.6A maximum current..."
+        
+        # Extract current config, append the override, and apply it
+        sudo -n rpi-eeprom-config > /tmp/current_eeprom.conf 2>/dev/null
+        echo "PSU_MAX_CURRENT=5000" >> /tmp/current_eeprom.conf
+        
+        if sudo -n rpi-eeprom-config --apply /tmp/current_eeprom.conf 2>/dev/null; then
+            echo "✅ Firmware patched successfully. Rebooting to apply full USB power..."
+            sudo -n reboot
+            exit 0
+        else
+            echo "❌ Failed to patch firmware (SUDO password required). Skipping."
+        fi
+    else
+        echo "✅ 1.6A USB Power already unlocked in firmware."
+    fi
+fi
+
 # Bulletproof: Kill any zombie processes from previous crashed runs before starting
 echo "🧹 Cleaning up old processes..."
 pkill -f "chromium" || true
