@@ -176,6 +176,10 @@ echo "✅ Server is up!"
 
 echo "🖥️ Launching Kiosk UI..."
 
+# Space out Chromium startup to prevent power/CPU spikes right after the Node server and Camera start
+echo "⏳ Waiting 3 seconds before launching Chromium..."
+sleep 3
+
 # Best Practice: Hardened Kiosk flags for a seamless demo experience:
 # --noerrdialogs: Prevents "Chromium crashed, restore tabs?" messages
 # --disable-infobars: Removes "Chromium is not your default browser" UI
