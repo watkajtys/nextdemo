@@ -10,9 +10,8 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
     const [status, setStatus] = useState<'pending' | 'ready'>('pending');
 
     useEffect(() => {
-        let timeoutId: NodeJS.Timeout;
-        let attempts = 0;
         let isMounted = true;
+        let transitionTimeout: NodeJS.Timeout;
 
         const checkStatus = async () => {
             if (!isMounted) return;
@@ -24,7 +23,7 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
                     apiBaseUrl = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
                 }
 
-                // Poll the real-time Jules SDK status on the VPS
+                // Check status just once
                 const statusRes = await fetch(`${apiBaseUrl}/api/portrait-status/${portraitId}`);
                 if (statusRes.ok) {
                     const data = await statusRes.json();
@@ -32,28 +31,26 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
                         isReady = true;
                     }
                 } else if (statusRes.status === 404) {
-                    // Fallback: If VPS has no memory of this session (e.g. an old scan or VPS restarted), check GitHub once
                     const ghRes = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
                     if (ghRes.ok) isReady = true;
                 }
             } catch (e) {}
 
+            if (!isMounted) return;
+
             if (isReady) {
                 setStatus('ready');
-                setTimeout(onReady, 2000);
-                return;
+                transitionTimeout = setTimeout(onReady, 2000);
+            } else {
+                // If it's not ready, give them time to read the message then enter the mosaic
+                transitionTimeout = setTimeout(onReady, 6000);
             }
-
-            attempts++;
-            // Poll gently: start at 3s, cap at 10s
-            const nextInterval = Math.min(3000 * Math.pow(1.2, attempts), 10000);
-            timeoutId = setTimeout(checkStatus, nextInterval);
         };
         
         checkStatus();
         return () => {
             isMounted = false;
-            clearTimeout(timeoutId);
+            if (transitionTimeout) clearTimeout(transitionTimeout);
         };
     }, [portraitId, onReady]);
 
@@ -62,10 +59,10 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
             {status === 'pending' ? (
                 <>
                     <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white mb-8"></div>
-                    <h1 className="text-3xl font-bold mb-4">Uplink Established...</h1>
-                    <p className="text-xl text-gray-400">Transmitting your portrait to the mainframe.</p>
-                    <p className="text-xl text-gray-400 mt-2">Our AI is analyzing the data and writing your story.</p>
-                    <p className="text-sm text-gray-500 mt-8">(This usually takes 1-2 minutes. Stay on this page.)</p>
+                    <h1 className="text-3xl font-bold mb-4">Something is coming soon...</h1>
+                    <p className="text-2xl font-semibold mt-4">Hi! We're Jules</p>
+                    <p className="text-xl text-gray-400 mt-2">The Home of Continuous AI at NEXT</p>
+                    <p className="text-md text-gray-500 mt-8 italic">We're still working on your portrait, but in the meantime check out the art so far</p>
                 </>
             ) : (
                 <>

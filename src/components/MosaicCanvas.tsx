@@ -731,7 +731,9 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent" 
+                            role="dialog"
+                            aria-modal="true"
+                            className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent select-none" 
                             onClick={(e) => handleClose(e)}
                             style={{ 
                                 width: calculateCardDimensions(windowSize.w, windowSize.h).width, 
@@ -739,13 +741,14 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             }}
                          >
                              {/* Close Button Top-Right Corner of the Image Area */}
-                             <div 
+                             <button 
+                                aria-label="Close portrait"
                                 className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group before:absolute before:-inset-3 before:content-['']"
                                 onClick={(e) => handleClose(e)}
                              >
                                 <div className="w-4 sm:w-5 h-[3px] bg-white rotate-45 absolute group-hover:scale-110" />
                                 <div className="w-4 sm:w-5 h-[3px] bg-white -rotate-45 absolute group-hover:scale-110" />
-                             </div>
+                             </button>
 
                              <motion.div 
                                 layout
@@ -777,7 +780,7 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                                     <div className="w-12 h-1.5 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors" />
                                 </div>
 
-                                <div className="overflow-y-auto px-5 pb-5 sm:px-8 sm:pb-8 custom-scrollbar flex-1">
+                                <div className="overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-8 sm:pb-[max(2rem,env(safe-area-inset-bottom))] custom-scrollbar flex-1 overscroll-contain select-text">
                                     <div className="space-y-6">
                                         <p className="font-sans text-base sm:text-lg text-gray-800 leading-relaxed font-medium">
                                             {openedCell.storyPanel || 'Processing neural scan... establishing connection with Jules mainframe. Narrative artifacts incoming.'}
