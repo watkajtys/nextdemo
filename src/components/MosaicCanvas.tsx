@@ -714,7 +714,13 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="absolute inset-0 flex items-center justify-center p-2 sm:p-4 z-20 pointer-events-auto"
+                        className="absolute z-20 pointer-events-auto flex items-center justify-center"
+                        style={{
+                            width: windowSize.w,
+                            height: windowSize.h,
+                            top: 0,
+                            left: 0
+                        }}
                         onClick={() => handleClose()}
                      >
                          <motion.div 
@@ -724,10 +730,11 @@ export const MosaicCanvas: React.FC<MosaicCanvasProps> = ({ animState, onAnimati
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             className="relative text-[#111] pointer-events-auto flex flex-col justify-end shadow-[0_0_100px_rgba(0,0,0,0.5)] cursor-pointer bg-transparent" 
                             onClick={(e) => handleClose(e)}
-                            style={{
-                                width: calculateCardDimensions(windowSize.w, windowSize.h).width,
+                            style={{ 
+                                width: calculateCardDimensions(windowSize.w, windowSize.h).width, 
                                 height: calculateCardDimensions(windowSize.w, windowSize.h).height
-                            }}                         >
+                            }}
+                         >
                              {/* Close Button Top-Right Corner of the Image Area */}
                              <div 
                                 className="absolute top-3 right-3 sm:top-4 sm:right-4 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-white/20 backdrop-blur-md border border-white/40 flex items-center justify-center cursor-pointer hover:bg-white/40 transition-all z-30 group"
