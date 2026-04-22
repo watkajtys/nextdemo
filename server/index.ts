@@ -365,8 +365,12 @@ const upload = multer({
 });
 
 const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    // Bypass secret requirement for local requests
-    if (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1') {
+    // Bypass secret requirement for local requests, private networks, and Tailscale
+    const isLocal = req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1';
+    const isPrivate = req.ip.startsWith('192.168.') || req.ip.startsWith('10.') || req.ip.startsWith('172.') || req.ip.startsWith('::ffff:192.168.') || req.ip.startsWith('::ffff:10.') || req.ip.startsWith('::ffff:172.');
+    const isTailscale = req.ip.startsWith('100.') || req.ip.startsWith('::ffff:100.');
+    
+    if (isLocal || isPrivate || isTailscale) {
         return next();
     }
 

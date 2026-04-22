@@ -160,7 +160,13 @@ function MainLayout() {
     };
 
     // If a user scans a QR code, they shouldn't see the camera UI.
-    const isCameraRole = !portraitId && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.'));
+    const isCameraRole = !portraitId && (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname.startsWith('192.168.') ||
+        window.location.hostname.startsWith('10.') ||
+        window.location.hostname.startsWith('172.') ||
+        window.location.hostname.startsWith('100.')
+    );
 
     if (portraitId && !ready) {
         return <PortraitPendingView portraitId={portraitId} onReady={() => setReady(true)} />;
