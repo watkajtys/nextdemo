@@ -1,0 +1,9 @@
+{
+  "id": "portrait-1776404576904",
+  "color": "#00ffff",
+  "gridX": 10,
+  "gridY": 10,
+  "imageUrl": "/portraits/portrait-1776404576904.png",
+  "storyPanel": "Subject: X-99. Codename: 'Neon Ghost'. A rogue cyber-runner known for infiltrating corporate mainframes using custom optical implants. The electric cyan hue mirrors the signature visual trail left behind after a successful data heist.",
+  "julesThoughtProcess": "I chose Electric Cyan (#00ffff) because it strongly evokes a classic cyberpunk aesthetic, standing out vividly against the black background. For the placement, I chose grid coordinates (10, 10), which is centrally located in the 20x20 grid (GRID_SIZE = 20), creating a striking anchor point for the quadtree mosaic."
+}
