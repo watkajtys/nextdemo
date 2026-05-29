@@ -9,7 +9,8 @@ interface MosaicState {
     
     setInitialCells: (cells: Cell[]) => void;
     addActiveCell: (cell: Cell) => void;
-    removeActiveCell: (cell: Cell) => void;
+    removeActiveCell: (cell) => void;
+    removeActiveCellByHash: (hash: string) => void;
     popEmptyBaseCell: () => Cell | undefined;
     incrementUserCount: () => void;
     addBulkActiveCells: (cells: Cell[]) => void;
@@ -42,6 +43,17 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
     removeActiveCell: (cellToRemove) => set((state) => ({
         activeCells: state.activeCells.filter(cell => cell !== cellToRemove)
     })),
+
+    removeActiveCellByHash: (hash) => set((state) => {
+        const cellToRemove = state.activeCells.find(c => c.hash === hash);
+        if (!cellToRemove) return state;
+        
+        return {
+            activeCells: state.activeCells.filter(c => c.hash !== hash),
+            emptyBaseCells: [...state.emptyBaseCells, cellToRemove],
+            userCount: Math.max(0, state.userCount - 1)
+        };
+    }),
     
     popEmptyBaseCell: () => {
         const { emptyBaseCells } = get();
@@ -120,22 +132,19 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
 
             await new Promise((resolve, reject) => {
                 const githubBase = 'https://raw.githubusercontent.com/watkajtys/nextdemo/main/public';
-                const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
 
                 img.onload = resolve;
                 img.onerror = () => {
                     // Fallback Tier 1: If local/default fails, try GitHub Raw
-                    if (!img.src.startsWith(githubBase) && !img.src.startsWith(vpsDomain)) {
+                    if (!img.src.startsWith(githubBase)) {
                         console.warn(`[Mosaic] Image missing locally (${id}). Trying GitHub Raw...`);
                         img.src = `${githubBase}${url}`;
                     } 
-                    // Fallback Tier 2: If GitHub Raw also fails (or was first), try the VPS Tailscale tunnel
-                    else if (img.src.startsWith(githubBase)) {
-                        console.warn(`[Mosaic] Image missing on GitHub (${id}). Trying Cloud VPS tunnel...`);
-                        img.src = `${vpsDomain}${url}`;
-                    }
                     else {
-                        reject(new Error('Image failed to load from all sources (Local, GitHub, and VPS).'));
+                        // If it fails on GitHub too, and we lost the VPS, we MUST remove this card
+                        console.error(`[Mosaic] Image ${id} not found locally or on GitHub. Removing card.`);
+                        get().removeActiveCellByHash(id);
+                        reject(new Error('Image failed to load from all available sources.'));
                     }
                 };
                 img.src = safeUrl;
