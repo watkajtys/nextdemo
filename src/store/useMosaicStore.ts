@@ -119,16 +119,23 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
             }
 
             await new Promise((resolve, reject) => {
+                const githubBase = 'https://raw.githubusercontent.com/watkajtys/nextdemo/main/public';
+                const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
+
                 img.onload = resolve;
                 img.onerror = () => {
-                    // Fallback: If a local Pi 404s (e.g., trying to load a photo taken by a *different* booth that exists in the Git JSON but not locally),
-                    // dynamically rewrite the URL to fetch it from GitHub Raw!
-                    const githubBase = 'https://raw.githubusercontent.com/watkajtys/nextdemo/main/public';
-                    if (!img.src.startsWith(githubBase)) {
-                        console.warn(`[Mosaic] Local image missing (${id}). Falling back to GitHub Raw...`);
+                    // Fallback Tier 1: If local/default fails, try GitHub Raw
+                    if (!img.src.startsWith(githubBase) && !img.src.startsWith(vpsDomain)) {
+                        console.warn(`[Mosaic] Image missing locally (${id}). Trying GitHub Raw...`);
                         img.src = `${githubBase}${url}`;
-                    } else {
-                        reject(new Error('Image failed to load from both local and GitHub.'));
+                    } 
+                    // Fallback Tier 2: If GitHub Raw also fails (or was first), try the VPS Tailscale tunnel
+                    else if (img.src.startsWith(githubBase)) {
+                        console.warn(`[Mosaic] Image missing on GitHub (${id}). Trying Cloud VPS tunnel...`);
+                        img.src = `${vpsDomain}${url}`;
+                    }
+                    else {
+                        reject(new Error('Image failed to load from all sources (Local, GitHub, and VPS).'));
                     }
                 };
                 img.src = safeUrl;
