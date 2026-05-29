@@ -109,9 +109,9 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
             let safeUrl = url;
             if (url.startsWith('/') && !url.startsWith('//')) {
                 if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
-                    // On the public live site, fetch images securely from the Cloud VPS Tailscale Funnel
-                    const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
-                    safeUrl = `${vpsDomain}${url}`;
+                    // On the public live site, fetch images from GitHub Raw (faster/more reliable than the VPS tunnel for static assets)
+                    const githubBase = 'https://raw.githubusercontent.com/watkajtys/nextdemo/main/public';
+                    safeUrl = `${githubBase}${url}`;
                 } else {
                     // On the local Pi (or local dev), fetch images instantly from the local disk via Express
                     safeUrl = import.meta.env.BASE_URL + url.slice(1);
@@ -122,13 +122,13 @@ export const useMosaicStore = create<MosaicState>((set, get) => ({
                 img.onload = resolve;
                 img.onerror = () => {
                     // Fallback: If a local Pi 404s (e.g., trying to load a photo taken by a *different* booth that exists in the Git JSON but not locally),
-                    // dynamically rewrite the URL to fetch it securely from the Cloud VPS Tailscale Funnel instead!
-                    const vpsDomain = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
-                    if (!img.src.startsWith(vpsDomain)) {
-                        console.warn(`[Mosaic] Local image missing (${id}). Falling back to Cloud VPS tunnel...`);
-                        img.src = `${vpsDomain}${url}`;
+                    // dynamically rewrite the URL to fetch it from GitHub Raw!
+                    const githubBase = 'https://raw.githubusercontent.com/watkajtys/nextdemo/main/public';
+                    if (!img.src.startsWith(githubBase)) {
+                        console.warn(`[Mosaic] Local image missing (${id}). Falling back to GitHub Raw...`);
+                        img.src = `${githubBase}${url}`;
                     } else {
-                        reject(new Error('Image failed to load from both local and cloud.'));
+                        reject(new Error('Image failed to load from both local and GitHub.'));
                     }
                 };
                 img.src = safeUrl;

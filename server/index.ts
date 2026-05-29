@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -9,7 +10,6 @@ import fsSync from 'fs';
 import { exec, spawn } from 'child_process';
 import util from 'util';
 import { GoogleGenAI } from '@google/genai';
-import { jules } from '@google/jules-sdk';
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import QRCode from 'qrcode';
 import thermal from './print';
@@ -59,7 +59,7 @@ setInterval(() => {
 class CameraManager {
     async captureImage(): Promise<Buffer> {
         console.log(`📸 Requesting Python Picamera2 native capture...`);
-        const res = await fetch('http://127.0.0.1:5000/capture', { method: 'POST' });
+        const res = await fetch('http://127.0.0.1:5001/capture', { method: 'POST' });
         if (!res.ok) {
             throw new Error(`Camera service error: ${res.statusText}`);
         }
@@ -226,6 +226,7 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
 
     let finalImageToThreshold = squareBuffer;
 
+    console.log(`[AI Check] Role: ${process.env.BOOTH_ROLE}, Gemini Key: ${process.env.GEMINI_API_KEY?.substring(0, 5)}..., Jules Key: ${process.env.JULES_API_KEY?.substring(0, 5)}...`);
     if (process.env.BOOTH_ROLE !== 'cloud' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MISSING_KEY') {
         try {
             console.log('🎨 Starting local edge Gemini stylization...');
@@ -297,15 +298,26 @@ async function processImage(imageBuffer: Buffer, existingPortraitId?: string, sk
         }
     }
     let julesSessionId: string | undefined;
-    if (process.env.BOOTH_ROLE === 'cloud' && process.env.JULES_API_KEY) {
-        // Construct the full public URL so Jules can fetch the image over the network
-        // The VPS Express app handles serving the public/portraits folder directly
-        const vpsDomain = process.env.VPS_DOMAIN || process.env.CLOUD_SERVER_URL || `http://100.67.124.95:${PORT}`;
-        // Ensure vpsDomain does not have a trailing slash
-        const cleanVpsDomain = vpsDomain.replace(/\/$/, '');
-        const fullImageUrl = `${cleanVpsDomain}${publicUrl}`;
+    if (process.env.JULES_API_KEY) {
+        // --- REDUNDANCY CHECK ---
+        // Prevents the background worker from firing duplicate Jules sessions during sync retries
+        let existingSession = null;
+        try {
+            existingSession = db.prepare('SELECT session_id FROM jules_sessions WHERE portrait_id = ?').get(portraitId) as { session_id: string } | undefined;
+        } catch (e) {}
 
-        const julesPrompt = `A new 1-bit high-contrast portrait was captured! Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}
+        if (existingSession) {
+            console.log(`🤖 Jules session already exists for ${portraitId} (${existingSession.session_id}). Skipping.`);
+            julesSessionId = existingSession.session_id;
+        } else {
+            // Construct the full public URL so Jules can fetch the image over the network
+            // The VPS Express app handles serving the public/portraits folder directly
+            const vpsDomain = process.env.VPS_DOMAIN || process.env.CLOUD_SERVER_URL || `http://100.67.124.95:${PORT}`;
+            // Ensure vpsDomain does not have a trailing slash
+            const cleanVpsDomain = vpsDomain.replace(/\/$/, '');
+            const fullImageUrl = `${cleanVpsDomain}${publicUrl}`;
+
+            const julesPrompt = `A new 1-bit high-contrast portrait was captured! Portrait ID: ${portraitId}. Image URL: ${fullImageUrl}
 
 STORYTELLING FRAME & TONE:
 - Setting: A technofuturistic world where humans, robots, and AIs coexist.
@@ -313,24 +325,27 @@ STORYTELLING FRAME & TONE:
 - Constraints: DO NOT make it a cynical, grim dystopian nightmare (No "Black Mirror"). DO NOT make it a flawless, conflict-free, overly saccharine utopia (No "Teletubbies").
 - Vibe: Atmospheric, punchy, and hopeful. Focus on resilience, quiet connection, and the "slice of life" in a high-tech society.`;
 
-        // Fire-and-forget Jules session - never block the critical path
-        jules.session({
-            prompt: julesPrompt,
-            source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
-            autoPr: true,
-            requireApproval: false,
-        }).then(session => {
-            console.log('🤖 Jules session started:', session.id);
-            try {
-                db.prepare(`
-                    INSERT INTO jules_sessions (portrait_id, session_id, created_at)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(portrait_id) DO UPDATE SET session_id=excluded.session_id
-                `).run(portraitId, session.id, Date.now());
-            } catch (err) {
-                console.error('❌ Failed to save Jules session to DB:', (err as Error).message);
-            }
-        }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
+            // Fire-and-forget Jules session - never block the critical path
+            import('@google/jules-sdk').then(({ jules }) => {
+                return jules.session({
+                    prompt: julesPrompt,
+                    source: { github: process.env.GITHUB_REPO || 'watkajtys/nextdemo', baseBranch: 'main' },
+                    autoPr: true,
+                    requireApproval: false,
+                });
+            }).then(session => {
+                console.log('🤖 Jules session started:', session.id);
+                try {
+                    db.prepare(`
+                        INSERT INTO jules_sessions (portrait_id, session_id, created_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(portrait_id) DO UPDATE SET session_id=excluded.session_id
+                    `).run(portraitId, session.id, Date.now());
+                } catch (err) {
+                    console.error('❌ Failed to save Jules session to DB:', (err as Error).message);
+                }
+            }).catch(e => console.error('🤖 Jules failed:', (e as Error).message));
+        }
     }
 
     if (process.env.BOOTH_ROLE !== 'cloud') {
@@ -343,7 +358,7 @@ STORYTELLING FRAME & TONE:
 import http from 'http';
 
 app.get('/api/preview', (req, res) => {
-    const proxyReq = http.request('http://127.0.0.1:5000/preview', (proxyRes) => {
+    const proxyReq = http.request('http://127.0.0.1:5001/preview', (proxyRes) => {
         res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
     });
@@ -424,6 +439,7 @@ app.get('/api/portrait-status/:id', async (req, res) => {
         return res.status(404).json({ error: 'Session not found for portrait' });
     }
     try {
+        const { jules } = await import('@google/jules-sdk');
         const session = jules.session(sessionId);
         const info = await session.info();
         res.json({ status: info.state });
@@ -575,18 +591,23 @@ app.post('/api/save-for-print', requireSecret, async (req, res) => {
         const labelBuffer = canvas.toBuffer('image/png');
         setImmediate(async () => {
             try {
+                console.log('🖨️ [Hardware] Searching for compatible USB thermal printer...');
                 const printer = await printerHardware.find();
                 if (printer) {
                     try {
+                        console.log(`🖨️ [Hardware] Found printer: ${printer.name}. Preparing job...`);
                         console.log('⏸️ Pausing camera stream to prevent USB power spike during print...');
-                        await fetch(`http://127.0.0.1:5000/pause`, { method: 'POST' }).catch(() => {});
+                        await fetch(`http://127.0.0.1:5001/pause`, { method: 'POST' }).catch(() => {});
                         await printerHardware.fix(printer.name);
-                        await printerHardware.print(printer.name, labelBuffer, { fit: true, media: 'w288h432' });
+                        await printerHardware.print(printer.name, labelBuffer, { fit: true });
                         await fs.writeFile(jsonPath, JSON.stringify({ portraitId, julesSessionId, imageUrl, printed: true }, null, 2));
+                        console.log('✅ [Hardware] Print successful');
                     } finally {
                         console.log('▶️ Resuming camera stream...');
-                        await fetch(`http://127.0.0.1:5000/resume`, { method: 'POST' }).catch(() => {});
+                        await fetch(`http://127.0.0.1:5001/resume`, { method: 'POST' }).catch(() => {});
                     }
+                } else {
+                    console.log('⚠️ [Hardware] No USB thermal printer found. Skipping physical print.');
                 }
             } catch (e) { console.error('❌ [Hardware] Print failed:', e); }
         });

@@ -18,21 +18,24 @@ function PortraitPendingView({ portraitId, onReady }: { portraitId: string, onRe
             
             let isReady = false;
             try {
-                let apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
-                if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
-                    apiBaseUrl = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
-                }
-
-                // Check status just once
-                const statusRes = await fetch(`${apiBaseUrl}/api/portrait-status/${portraitId}`);
-                if (statusRes.ok) {
-                    const data = await statusRes.json();
-                    if (data.status === 'completed' || data.status === 'failed') {
-                        isReady = true;
+                // Priority 1: Check GitHub Raw directly (reliable fallback if VPS is down)
+                const ghRes = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
+                if (ghRes.ok) {
+                    isReady = true;
+                } else {
+                    // Priority 2: Check VPS API (handles real-time status before GitHub commit)
+                    let apiBaseUrl = window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin;
+                    if (typeof window !== 'undefined' && window.location.hostname.includes('github.io')) {
+                        apiBaseUrl = import.meta.env.VITE_VPS_DOMAIN || 'https://ubuntu-8gb-hel1-1.tail050dfe.ts.net';
                     }
-                } else if (statusRes.status === 404) {
-                    const ghRes = await fetch(`https://raw.githubusercontent.com/watkajtys/nextdemo/main/src/data/portraits/${portraitId}.json?t=${Date.now()}`, { cache: 'no-store' });
-                    if (ghRes.ok) isReady = true;
+
+                    const statusRes = await fetch(`${apiBaseUrl}/api/portrait-status/${portraitId}`);
+                    if (statusRes.ok) {
+                        const data = await statusRes.json();
+                        if (data.status === 'completed' || data.status === 'failed') {
+                            isReady = true;
+                        }
+                    }
                 }
             } catch (e) {}
 
